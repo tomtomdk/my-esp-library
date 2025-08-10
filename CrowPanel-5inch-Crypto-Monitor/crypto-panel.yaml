@@ -201,12 +201,20 @@ lvgl:
               scroll_chain: "OFF"
               scrollable: false
               widgets:
+                - label: { x: 20,  y: 10,  text: "System & Data", text_color: 0xFFFFFF, text_font: "montserrat_26" }
+
+                - label: { id: info_last,   x: 20,  y: 60,  text: "Last update: —",  text_color: 0xE2E8F0, text_font: "montserrat_20" }
+                - label: { id: info_fx,     x: 20,  y: 100, text: "USD->DKK: —",    text_color: 0xE2E8F0, text_font: "montserrat_20" }
+                - label: { id: info_wifi,   x: 20,  y: 140, text: "WiFi: —",        text_color: 0xE2E8F0, text_font: "montserrat_20" }
+                - label: { id: info_ip,     x: 20,  y: 180, text: "IP: —",          text_color: 0xE2E8F0, text_font: "montserrat_20" }
+                - label: { id: info_uptime, x: 20,  y: 220, text: "Uptime: —",      text_color: 0xE2E8F0, text_font: "montserrat_20" }
+
                 - label:
-                    x: 300
-                    y: 180
-                    text: "Info page\n(coming soon)"
-                    text_color: 0xA1A1AA
-                    text_font: "montserrat_24"
+                    x: 20
+                    y: 260
+                    text: "Sources: Frankfurter (FX), Binance (prices)"
+                    text_color: 0x94A3B8
+                    text_font: "montserrat_18"
 
           # ---------- Page: Settings ----------
           - obj:
@@ -380,6 +388,67 @@ text_sensor:
   - platform: template
     id: status_line
     on_value: [lvgl.label.update: { id: status, text: !lambda 'return x;' }]
+   # Page Info
+  - platform: template
+    id: info_last_line
+    on_value: [lvgl.label.update: { id: info_last, text: !lambda 'return x;' }]
+
+  - platform: template
+    id: info_fx_line
+    on_value: [lvgl.label.update: { id: info_fx, text: !lambda 'return x;' }]
+
+  - platform: template
+    id: info_wifi_line
+    on_value: [lvgl.label.update: { id: info_wifi, text: !lambda 'return x;' }]
+
+  - platform: template
+    id: info_ip_line
+    on_value: [lvgl.label.update: { id: info_ip, text: !lambda 'return x;' }]
+
+  - platform: template
+    id: info_uptime_line
+    on_value: [lvgl.label.update: { id: info_uptime, text: !lambda 'return x;' }]
+
+  - platform: wifi_info
+    ip_address:
+      id: wifi_ip
+      internal: true
+      on_value:
+        then:
+          - lambda: |-
+              std::string s = "IP: " + x;
+              id(info_ip_line).publish_state(s);
+    ssid:
+      id: wifi_ssid
+      internal: true
+
+sensor:
+  - platform: wifi_signal
+    id: wifi_rssi
+    update_interval: 30s
+    on_value:
+      then:
+        - lambda: |-
+            char buf[96];
+            snprintf(buf, sizeof(buf), "WiFi: %s  (%d dBm)",
+                     id(wifi_ssid).state.c_str(), (int)x);
+            id(info_wifi_line).publish_state(buf);
+
+  - platform: uptime
+    id: sys_uptime
+    update_interval: 60s
+    on_value:
+      then:
+        - lambda: |-
+            uint32_t s = (uint32_t) x;
+            uint32_t d = s / 86400; s %= 86400;
+            uint32_t h = s / 3600;  s %= 3600;
+            uint32_t m = s / 60;
+            char buf[64];
+            if (d) snprintf(buf, sizeof(buf), "Uptime: %ud %02u:%02u", d, h, m);
+            else   snprintf(buf, sizeof(buf), "Uptime: %02u:%02u", h, m);
+            id(info_uptime_line).publish_state(buf);
+
 
 # Bottom nav button clicks -> page switching
 binary_sensor:
@@ -664,7 +733,6 @@ globals:
 
 # ====================== Data Fetch ======================
 script:
-  # 1) Get USD->DKK from Frankfurter
   - id: fetch_prices
     mode: queued
     then:
@@ -685,12 +753,18 @@ script:
                     }
                     return true;
                   });
+
+                  // 👉 Publish to Info tab right after we've updated usd2dkk
+                  if (ok) {
+                    char fx[48];
+                    snprintf(fx, sizeof(fx), "USD->DKK: %.4f", id(usd2dkk));
+                    id(info_fx_line).publish_state(fx);
+                  } else {
+                    id(info_fx_line).publish_state("USD->DKK: —");
+                  }
+
                   ESP_LOGD("crypto", "USD->DKK = %.4f", id(usd2dkk));
                   id(status_line).publish_state(ok ? "FX OK" : "FX parse error");
-              - script.execute: fetch_coins
-          on_error:
-            then:
-              - lambda: id(status_line).publish_state("FX HTTP error (using cached FX)");
               - script.execute: fetch_coins
 
   # 2) Per-coin requests from Binance
@@ -1035,12 +1109,30 @@ script:
                       }
                       if (id(current_coin) == 4) lv_label_set_text(id(graph_ascii), g.c_str());
                     }
+
+                    // ---- Stamp "Last update" on Info tab ----
+                    {
+                      auto now = id(ntp).now();
+                      if (now.is_valid()) {
+                        char t[48];
+                        snprintf(t, sizeof(t), "Last update: %02d:%02d:%02d", now.hour, now.minute, now.second);
+                        id(info_last_line).publish_state(t);
+                      }
+                    }
                   } else {
                     id(status_line).publish_state("BNB parse error");
                   }
           on_error:
             then:
-              - lambda: id(status_line).publish_state("BNB HTTP error");
+              - lambda: |-
+                  id(status_line).publish_state("BNB HTTP error");
+                  // Also stamp attempt time on error
+                  auto now = id(ntp).now();
+                  if (now.is_valid()) {
+                    char t[48];
+                    snprintf(t, sizeof(t), "Last update: %02d:%02d:%02d", now.hour, now.minute, now.second);
+                    id(info_last_line).publish_state(t);
+                  }
 
 # Refresh every 60 s — but don't pile up if a fetch is still running
 interval:
