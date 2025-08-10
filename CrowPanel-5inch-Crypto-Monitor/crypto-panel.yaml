@@ -1,0 +1,1054 @@
+esphome:
+  name: crowpanel-crypto
+  friendly_name: CrowPanel Crypto
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap: { ssid: "CrowPanel-Setup" }
+  on_connect:
+    then:
+      - logger.log: "WiFi connected -> fetching…"
+      - lvgl.label.update: { id: status, text: "WiFi OK, fetching…" }
+      - script.execute: fetch_prices
+
+captive_portal:
+
+time:
+  - platform: sntp
+    id: ntp
+    timezone: Europe/Stockholm
+    on_time_sync:
+      then:
+        - logger.log: "Time synced -> fetching…"
+        - lvgl.label.update: { id: status, text: "Time synced, fetching…" }
+        - script.execute: fetch_prices
+
+logger:
+  level: DEBUG
+
+api:
+
+ota:
+  - platform: esphome
+
+# Backlight
+output:
+  - platform: ledc
+    pin: 2
+    id: bl_pwm
+    frequency: 20000 Hz
+
+light:
+  - platform: monochromatic
+    id: backlight
+    output: bl_pwm
+    restore_mode: ALWAYS_ON
+
+# I2C for GT911 touch
+i2c:
+  sda: GPIO19
+  scl: GPIO20
+  scan: true
+
+touchscreen:
+  - platform: gt911
+    id: touch
+    address: 0x5D        # (=93). If logs don’t find it, try 0x14.
+
+# CrowPanel S3 RGB display
+display:
+  - platform: rpi_dpi_rgb
+    id: main_display
+    dimensions: { width: 800, height: 480 }
+    color_order: RGB
+    invert_colors: true
+    update_interval: never
+    auto_clear_enabled: false
+    de_pin: 40
+    hsync_pin: 39
+    vsync_pin: 41
+    pclk_pin: 0
+    pclk_frequency: 16MHz
+    pclk_inverted: true
+    # Stable 800x480 timings
+    hsync_back_porch: 40
+    hsync_pulse_width: 48
+    hsync_front_porch: 40
+    vsync_back_porch: 27
+    vsync_pulse_width: 3
+    vsync_front_porch: 13
+    data_pins:
+      red:   [45, 48, 47, 21, 14]
+      green: [ 5,  6,  7, 15, 16, 4]
+      blue:  [ 8,  3, 46,  9,  1]
+
+# ====================== UI (LVGL) ======================
+lvgl:
+  color_depth: 16
+  touchscreens: [touch]
+
+  # Brief transparent overlay to avoid the initial scroll; auto-hides.
+  on_boot:
+    then:
+      - lvgl.widget.show: boot_blocker
+      - delay: 1000ms
+      - lambda: |-
+          lv_obj_clear_flag(id(root), LV_OBJ_FLAG_SCROLLABLE);
+          lv_obj_clear_flag(id(page_prices), LV_OBJ_FLAG_SCROLLABLE);
+          lv_obj_clear_flag(id(page_info), LV_OBJ_FLAG_SCROLLABLE);
+          lv_obj_clear_flag(id(page_settings), LV_OBJ_FLAG_SCROLLABLE);
+          lv_obj_clear_flag(id(nav_bar), LV_OBJ_FLAG_SCROLLABLE);
+          lv_obj_scroll_to_y(id(root), 0, LV_ANIM_OFF);
+          lv_obj_scroll_to_y(id(page_prices), 0, LV_ANIM_OFF);
+          lv_obj_set_y(id(root), 0);
+          lv_obj_set_y(id(page_prices), 0);
+          lv_obj_set_y(id(nav_bar), 416);
+
+          // Reflect saved toggle state on the switch
+          if (lv_obj_is_valid(id(sw_colorize))) {
+            if (id(colorize_pct)) lv_obj_add_state(id(sw_colorize), LV_STATE_CHECKED);
+            else                  lv_obj_clear_state(id(sw_colorize), LV_STATE_CHECKED);
+          }
+      - lvgl.widget.hide: boot_blocker
+
+  widgets:
+    - obj:
+        id: root
+        x: 0
+        y: 0
+        width: 800
+        height: 480
+        bg_color: 0x000000
+        bg_opa: "100%"
+        radius: 0
+        pad_all: 0
+        scrollbar_mode: "OFF"
+        scroll_chain: "OFF"
+        scrollable: false
+        widgets:
+
+          # ---------- Page: Prices ----------
+          - obj:
+              id: page_prices
+              x: 0
+              y: 0
+              width: 800
+              height: 416            # 480 - 64 (nav)
+              bg_opa: "0%"
+              scrollbar_mode: "OFF"
+              scroll_chain: "OFF"
+              scrollable: false
+              widgets:
+                - label:
+                    id: title
+                    x: 20
+                    y: 10
+                    text: "Crypto (DKK)"
+                    text_color: 0xFFFFFF
+                    text_font: "montserrat_30"
+
+                # Left column: names
+                - label: { id: btc_name, x: 20,  y: 60,  text: "Bitcoin (BTC)",  text_color: 0xA3B8D1, text_font: "montserrat_22" }
+                - label: { id: eth_name, x: 20,  y: 120, text: "Ethereum (ETH)", text_color: 0xA3B8D1, text_font: "montserrat_22" }
+                - label: { id: sol_name, x: 20,  y: 180, text: "Solana (SOL)",   text_color: 0xA3B8D1, text_font: "montserrat_22" }
+                - label: { id: ada_name, x: 20,  y: 240, text: "Cardano (ADA)",  text_color: 0xA3B8D1, text_font: "montserrat_22" }
+                - label: { id: bnb_name, x: 20,  y: 300, text: "BNB (BNB)",      text_color: 0xA3B8D1, text_font: "montserrat_22" }
+
+                # Right column: values
+                - label: { id: btc_val, x: 330, y: 60,  text: "-", text_color: 0xE2E8F0, text_font: "montserrat_28", recolor: true }
+                - label: { id: eth_val, x: 330, y: 120, text: "-", text_color: 0xE2E8F0, text_font: "montserrat_28", recolor: true }
+                - label: { id: sol_val, x: 330, y: 180, text: "-", text_color: 0xE2E8F0, text_font: "montserrat_28", recolor: true }
+                - label: { id: ada_val, x: 330, y: 240, text: "-", text_color: 0xE2E8F0, text_font: "montserrat_28", recolor: true }
+                - label: { id: bnb_val, x: 330, y: 300, text: "-", text_color: 0xE2E8F0, text_font: "montserrat_28", recolor: true }
+
+                # Tap areas for each row (open detail)
+                - button: { id: btn_row_btc, x: 0, y:  48, width: 800, height: 48, radius: 0, bg_opa: "0%" }
+                - button: { id: btn_row_eth, x: 0, y: 108, width: 800, height: 48, radius: 0, bg_opa: "0%" }
+                - button: { id: btn_row_sol, x: 0, y: 168, width: 800, height: 48, radius: 0, bg_opa: "0%" }
+                - button: { id: btn_row_ada, x: 0, y: 228, width: 800, height: 48, radius: 0, bg_opa: "0%" }
+                - button: { id: btn_row_bnb, x: 0, y: 288, width: 800, height: 48, radius: 0, bg_opa: "0%" }
+
+                # Status (top-right)
+                - label:
+                    id: status
+                    align: "TOP_RIGHT"
+                    x: -20
+                    y: 10
+                    text: "Booting…"
+                    text_color: 0x94A3B8
+                    text_font: "montserrat_20"
+
+          # ---------- Page: Info ----------
+          - obj:
+              id: page_info
+              x: 0
+              y: 0
+              width: 800
+              height: 416
+              hidden: true
+              bg_opa: "0%"
+              scrollbar_mode: "OFF"
+              scroll_chain: "OFF"
+              scrollable: false
+              widgets:
+                - label:
+                    x: 300
+                    y: 180
+                    text: "Info page\n(coming soon)"
+                    text_color: 0xA1A1AA
+                    text_font: "montserrat_24"
+
+          # ---------- Page: Settings ----------
+          - obj:
+              id: page_settings
+              x: 0
+              y: 0
+              width: 800
+              height: 416
+              hidden: true
+              bg_opa: "0%"
+              scrollbar_mode: "OFF"
+              scroll_chain: "OFF"
+              scrollable: false
+              widgets:
+                - label:
+                    x: 220
+                    y: 160
+                    text: "Colorize % change"
+                    text_color: 0xE2E8F0
+                    text_font: "montserrat_22"
+                - switch:
+                    id: sw_colorize
+                    x: 560
+                    y: 156
+                    width: 80
+                    height: 32
+
+          # ---------- Coin Detail Page ----------
+          - obj:
+              id: page_coin
+              x: 0
+              y: 0
+              width: 800
+              height: 416
+              hidden: true
+              bg_opa: "0%"
+              scrollbar_mode: "OFF"
+              scroll_chain: "OFF"
+              scrollable: false
+              widgets:
+                - label: { id: coin_title, x: 20, y: 10, text: "Coin", text_color: 0xFFFFFF, text_font: "montserrat_30" }
+                - label: { id: coin_price_line, x: 20, y: 60, text: "-", text_color: 0xE2E8F0, text_font: "montserrat_28", recolor: true }
+
+                - obj:
+                    id: chart_frame
+                    x: 20
+                    y: 110
+                    width: 760
+                    height: 200
+                    radius: 6
+                    bg_color: 0x1F2937
+                    bg_opa: "100%"
+                    scrollable: false
+                    widgets:
+                      - label:
+                          id: graph_ascii
+                          x: 12
+                          y: 12
+                          width: 736
+                          height: 176
+                          text: "Waiting for data..."
+                          text_color: 0xE2E8F0
+                          text_font: "montserrat_20"
+                          long_mode: "WRAP"
+
+                # Alerts controls
+                - label: { x: 20,  y: 330, text: "Alert when |%| ≥", text_color: 0xA3B8D1, text_font: "montserrat_20" }
+                - button:
+                    id: btn_alert_minus
+                    x: 230
+                    y: 322
+                    width: 40
+                    height: 40
+                    radius: 6
+                    widgets: [ { label: { align: "CENTER", text: "-", text_font: "montserrat_24" } } ]
+                - label: { id: alert_threshold_lbl, x: 280, y: 328, text: "5.0%", text_color: 0xE2E8F0, text_font: "montserrat_22" }
+                - button:
+                    id: btn_alert_plus
+                    x: 360
+                    y: 322
+                    width: 40
+                    height: 40
+                    radius: 6
+                    widgets: [ { label: { align: "CENTER", text: "+", text_font: "montserrat_24" } } ]
+                - label: { x: 430, y: 330, text: "Enabled", text_color: 0xA3B8D1, text_font: "montserrat_20" }
+                - switch: { id: sw_alert_enabled, x: 520, y: 326, width: 80, height: 32 }
+
+                # Back
+                - button:
+                    id: btn_back_prices
+                    x: 680
+                    y: 10
+                    width: 100
+                    height: 40
+                    radius: 6
+                    widgets: [ { label: { align: "CENTER", text: "Back", text_font: "montserrat_20" } } ]
+
+          # ---------- Bottom Nav Bar ----------
+          - obj:
+              id: nav_bar
+              x: 0
+              y: 416
+              width: 800
+              height: 64
+              bg_color: 0x20252B
+              bg_opa: "100%"
+              pad_all: 8
+              radius: 0
+              scrollbar_mode: "OFF"
+              scroll_chain: "OFF"
+              scrollable: false
+              widgets:
+                - button:
+                    id: btn_prices
+                    x: 20
+                    y: 8
+                    width: 240
+                    height: 48
+                    radius: 6
+                    widgets:
+                      - label: { align: "CENTER", text: "Prices", text_font: "montserrat_22" }
+
+                - button:
+                    id: btn_info
+                    x: 280
+                    y: 8
+                    width: 240
+                    height: 48
+                    radius: 6
+                    widgets:
+                      - label: { align: "CENTER", text: "Info", text_font: "montserrat_22" }
+
+                - button:
+                    id: btn_settings
+                    x: 540
+                    y: 8
+                    width: 240
+                    height: 48
+                    radius: 6
+                    widgets:
+                      - label: { align: "CENTER", text: "Settings", text_font: "montserrat_22" }
+
+          # ---------- Transparent boot overlay (auto-hides) ----------
+          - button:
+              id: boot_blocker
+              x: 0
+              y: 0
+              width: 800
+              height: 480
+              radius: 0
+              bg_opa: "0%"
+              hidden: true
+
+# Text sensors (drive value labels & status)
+text_sensor:
+  - platform: template
+    id: btc_line
+    on_value: [lvgl.label.update: { id: btc_val, text: !lambda 'return x;' }]
+  - platform: template
+    id: eth_line
+    on_value: [lvgl.label.update: { id: eth_val, text: !lambda 'return x;' }]
+  - platform: template
+    id: sol_line
+    on_value: [lvgl.label.update: { id: sol_val, text: !lambda 'return x;' }]
+  - platform: template
+    id: ada_line
+    on_value: [lvgl.label.update: { id: ada_val, text: !lambda 'return x;' }]
+  - platform: template
+    id: bnb_line
+    on_value: [lvgl.label.update: { id: bnb_val, text: !lambda 'return x;' }]
+  - platform: template
+    id: status_line
+    on_value: [lvgl.label.update: { id: status, text: !lambda 'return x;' }]
+
+# Bottom nav button clicks -> page switching
+binary_sensor:
+  # ---- Bottom nav buttons ----
+  - platform: lvgl
+    id: bs_btn_prices
+    widget: btn_prices
+    on_click:
+      then:
+        - lvgl.widget.show: page_prices
+        - lvgl.widget.hide: page_info
+        - lvgl.widget.hide: page_settings
+        - lvgl.widget.hide: page_coin
+
+  - platform: lvgl
+    id: bs_btn_info
+    widget: btn_info
+    on_click:
+      then:
+        - lvgl.widget.hide: page_prices
+        - lvgl.widget.show: page_info
+        - lvgl.widget.hide: page_settings
+        - lvgl.widget.hide: page_coin
+
+  - platform: lvgl
+    id: bs_btn_settings
+    widget: btn_settings
+    on_click:
+      then:
+        - lvgl.widget.hide: page_prices
+        - lvgl.widget.hide: page_info
+        - lvgl.widget.show: page_settings
+        - lvgl.widget.hide: page_coin
+
+  # ---- Settings: Colorize % toggle ----
+  - platform: lvgl
+    id: bs_colorize_toggle
+    widget: sw_colorize
+    on_click:
+      then:
+        - lambda: |-
+            bool on = lv_obj_has_state(id(sw_colorize), LV_STATE_CHECKED);
+            id(colorize_pct) = on;
+        - script.execute: fetch_prices
+
+  # ---- Prices page: row tap targets -> Coin detail page ----
+  - platform: lvgl
+    id: bs_row_btc
+    widget: btn_row_btc
+    on_click:
+      then:
+        - lambda: |-
+            id(current_coin) = 0;
+            lv_label_set_text(id(coin_title), "Bitcoin (BTC)");
+            lv_label_set_text(id(coin_price_line), lv_label_get_text(id(btc_val)));
+            if (id(alert_enabled_btc)) lv_obj_add_state(id(sw_alert_enabled), LV_STATE_CHECKED);
+            else lv_obj_clear_state(id(sw_alert_enabled), LV_STATE_CHECKED);
+            { char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", id(alert_threshold_btc)); lv_label_set_text(id(alert_threshold_lbl), buf); }
+        - lvgl.widget.hide: page_prices
+        - lvgl.widget.show: page_coin
+
+  - platform: lvgl
+    id: bs_row_eth
+    widget: btn_row_eth
+    on_click:
+      then:
+        - lambda: |-
+            id(current_coin) = 1;
+            lv_label_set_text(id(coin_title), "Ethereum (ETH)");
+            lv_label_set_text(id(coin_price_line), lv_label_get_text(id(eth_val)));
+            if (id(alert_enabled_eth)) lv_obj_add_state(id(sw_alert_enabled), LV_STATE_CHECKED);
+            else lv_obj_clear_state(id(sw_alert_enabled), LV_STATE_CHECKED);
+            { char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", id(alert_threshold_eth)); lv_label_set_text(id(alert_threshold_lbl), buf); }
+        - lvgl.widget.hide: page_prices
+        - lvgl.widget.show: page_coin
+
+  - platform: lvgl
+    id: bs_row_sol
+    widget: btn_row_sol
+    on_click:
+      then:
+        - lambda: |-
+            id(current_coin) = 2;
+            lv_label_set_text(id(coin_title), "Solana (SOL)");
+            lv_label_set_text(id(coin_price_line), lv_label_get_text(id(sol_val)));
+            if (id(alert_enabled_sol)) lv_obj_add_state(id(sw_alert_enabled), LV_STATE_CHECKED);
+            else lv_obj_clear_state(id(sw_alert_enabled), LV_STATE_CHECKED);
+            { char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", id(alert_threshold_sol)); lv_label_set_text(id(alert_threshold_lbl), buf); }
+        - lvgl.widget.hide: page_prices
+        - lvgl.widget.show: page_coin
+
+  - platform: lvgl
+    id: bs_row_ada
+    widget: btn_row_ada
+    on_click:
+      then:
+        - lambda: |-
+            id(current_coin) = 3;
+            lv_label_set_text(id(coin_title), "Cardano (ADA)");
+            lv_label_set_text(id(coin_price_line), lv_label_get_text(id(ada_val)));
+            if (id(alert_enabled_ada)) lv_obj_add_state(id(sw_alert_enabled), LV_STATE_CHECKED);
+            else lv_obj_clear_state(id(sw_alert_enabled), LV_STATE_CHECKED);
+            { char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", id(alert_threshold_ada)); lv_label_set_text(id(alert_threshold_lbl), buf); }
+        - lvgl.widget.hide: page_prices
+        - lvgl.widget.show: page_coin
+
+  - platform: lvgl
+    id: bs_row_bnb
+    widget: btn_row_bnb
+    on_click:
+      then:
+        - lambda: |-
+            id(current_coin) = 4;
+            lv_label_set_text(id(coin_title), "BNB (BNB)");
+            lv_label_set_text(id(coin_price_line), lv_label_get_text(id(bnb_val)));
+            if (id(alert_enabled_bnb)) lv_obj_add_state(id(sw_alert_enabled), LV_STATE_CHECKED);
+            else lv_obj_clear_state(id(sw_alert_enabled), LV_STATE_CHECKED);
+            { char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", id(alert_threshold_bnb)); lv_label_set_text(id(alert_threshold_lbl), buf); }
+        - lvgl.widget.hide: page_prices
+        - lvgl.widget.show: page_coin
+
+  # ---- Coin detail: back + controls ----
+  - platform: lvgl
+    id: bs_back_prices
+    widget: btn_back_prices
+    on_click:
+      then:
+        - lvgl.widget.show: page_prices
+        - lvgl.widget.hide: page_coin
+
+  - platform: lvgl
+    id: bs_sw_alert_enabled
+    widget: sw_alert_enabled
+    on_click:
+      then:
+        - lambda: |-
+            bool on = lv_obj_has_state(id(sw_alert_enabled), LV_STATE_CHECKED);
+            switch (id(current_coin)) {
+              case 0: id(alert_enabled_btc) = on; break;
+              case 1: id(alert_enabled_eth) = on; break;
+              case 2: id(alert_enabled_sol) = on; break;
+              case 3: id(alert_enabled_ada) = on; break;
+              case 4: id(alert_enabled_bnb) = on; break;
+            }
+
+  - platform: lvgl
+    id: bs_alert_minus
+    widget: btn_alert_minus
+    on_click:
+      then:
+        - lambda: |-
+            auto apply=[&](float &thr){
+              thr -= 0.5f; if (thr < 0.5f) thr = 0.5f;
+              char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", thr);
+              lv_label_set_text(id(alert_threshold_lbl), buf);
+            };
+            switch (id(current_coin)) {
+              case 0: apply(id(alert_threshold_btc)); break;
+              case 1: apply(id(alert_threshold_eth)); break;
+              case 2: apply(id(alert_threshold_sol)); break;
+              case 3: apply(id(alert_threshold_ada)); break;
+              case 4: apply(id(alert_threshold_bnb)); break;
+            }
+
+  - platform: lvgl
+    id: bs_alert_plus
+    widget: btn_alert_plus
+    on_click:
+      then:
+        - lambda: |-
+            auto apply=[&](float &thr){
+              thr += 0.5f; if (thr > 50.0f) thr = 50.0f;
+              char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", thr);
+              lv_label_set_text(id(alert_threshold_lbl), buf);
+            };
+            switch (id(current_coin)) {
+              case 0: apply(id(alert_threshold_btc)); break;
+              case 1: apply(id(alert_threshold_eth)); break;
+              case 2: apply(id(alert_threshold_sol)); break;
+              case 3: apply(id(alert_threshold_ada)); break;
+              case 4: apply(id(alert_threshold_bnb)); break;
+            }
+
+
+# Manual refresh button in HA
+button:
+  - platform: template
+    name: "Refresh prices"
+    id: refresh_now
+    on_press:
+      - lvgl.label.update: { id: status, text: "Fetching (manual)..." }
+      - script.execute: fetch_prices
+
+# HTTP client
+http_request:
+  verify_ssl: false
+  timeout: 7000ms
+
+# USD->DKK cached + toggles + alert state
+globals:
+  - id: usd2dkk
+    type: float
+    restore_value: no
+    initial_value: '7.0'
+
+  - id: colorize_pct
+    type: bool
+    restore_value: yes
+    initial_value: 'true'
+
+  # Which coin is shown on detail page: 0=BTC,1=ETH,2=SOL,3=ADA,4=BNB
+  - id: current_coin
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  # Per-coin alert enable + threshold + fired guard
+  - id: alert_enabled_btc
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  - id: alert_threshold_btc
+    type: float
+    restore_value: yes
+    initial_value: '5.0'
+  - id: alert_fired_btc
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: alert_enabled_eth
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  - id: alert_threshold_eth
+    type: float
+    restore_value: yes
+    initial_value: '5.0'
+  - id: alert_fired_eth
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: alert_enabled_sol
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  - id: alert_threshold_sol
+    type: float
+    restore_value: yes
+    initial_value: '5.0'
+  - id: alert_fired_sol
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: alert_enabled_ada
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  - id: alert_threshold_ada
+    type: float
+    restore_value: yes
+    initial_value: '5.0'
+  - id: alert_fired_ada
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: alert_enabled_bnb
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  - id: alert_threshold_bnb
+    type: float
+    restore_value: yes
+    initial_value: '5.0'
+  - id: alert_fired_bnb
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+# ====================== Data Fetch ======================
+script:
+  # 1) Get USD->DKK from Frankfurter
+  - id: fetch_prices
+    mode: queued
+    then:
+      - lvgl.label.update: { id: status, text: "FX..." }
+      - http_request.get:
+          url: https://api.frankfurter.app/latest?from=USD&to=DKK
+          request_headers: { Accept: application/json }
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  ESP_LOGD("crypto", "FX body: %s", body.c_str());
+                  bool ok = false;
+                  json::parse_json(body, [&ok](JsonObject root) -> bool {
+                    if (root["rates"] && root["rates"]["DKK"]) {
+                      id(usd2dkk) = root["rates"]["DKK"].as<float>();
+                      ok = true;
+                    }
+                    return true;
+                  });
+                  ESP_LOGD("crypto", "USD->DKK = %.4f", id(usd2dkk));
+                  id(status_line).publish_state(ok ? "FX OK" : "FX parse error");
+              - script.execute: fetch_coins
+          on_error:
+            then:
+              - lambda: id(status_line).publish_state("FX HTTP error (using cached FX)");
+              - script.execute: fetch_coins
+
+  # 2) Per-coin requests from Binance
+  - id: fetch_coins
+    then:
+      - lvgl.label.update: { id: status, text: "Prices..." }
+
+      # BTC
+      - http_request.get:
+          url: https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT
+          request_headers: { Accept: application/json }
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  StaticJsonDocument<1024> doc;
+                  DeserializationError err = deserializeJson(doc, body);
+                  if (!err) {
+                    const char* lp = doc["lastPrice"] | "0";
+                    const char* pc = doc["priceChangePercent"] | "0";
+                    double price = atof(lp);
+                    double pct   = atof(pc);
+                    double dkk   = price * id(usd2dkk);
+
+                    char out[96];
+                    if (id(colorize_pct)) {
+                      const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
+                      snprintf(out, sizeof(out), "DKK %.2f  (%s %+.2f%%#)", dkk, col, pct);
+                    } else {
+                      snprintf(out, sizeof(out), "DKK %.2f  (%+.2f%%)", dkk, pct);
+                    }
+                    id(btc_line).publish_state(out);
+
+                    // Alerts
+                    {
+                      float thr = id(alert_threshold_btc);
+                      bool en   = id(alert_enabled_btc);
+                      bool &fired = id(alert_fired_btc);
+                      if (en) {
+                        if (!fired && fabs(pct) >= thr) {
+                          fired = true;
+                          char s[64]; snprintf(s, sizeof(s), "ALERT: BTC %+.2f%% (>= %.1f%%)", pct, thr);
+                          id(status_line).publish_state(s);
+                        } else if (fired && fabs(pct) < thr*0.8f) {
+                          fired = false;
+                        }
+                      } else {
+                        fired = false;
+                      }
+                    }
+
+                    // ---- BTC sparkline history + render (40 samples, 8 rows) ----
+                    static float hist_btc[40]; static int len_btc=0, idx_btc=0;
+                    {
+                      // push latest
+                      const int cap = 40;
+                      if (len_btc < cap) hist_btc[len_btc++] = dkk; else { hist_btc[idx_btc] = dkk; idx_btc = (idx_btc + 1) % cap; }
+
+                      const int n = len_btc;
+                      const int start = (n < cap) ? 0 : idx_btc;  // oldest index
+                      float mn = hist_btc[start], mx = hist_btc[start];
+                      for (int k=1;k<n;k++){ float v=hist_btc[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
+                      if (mx - mn < 1e-6f) mx = mn + 1.0f;
+
+                      std::string g; g.reserve((n+1)*8);
+                      for (int row = 7; row >= 0; --row) {
+                        for (int k=0;k<n;k++){
+                          float v = hist_btc[(start+k)%cap];
+                          float t = (v - mn) / (mx - mn);
+                          int   h = (int)(t*7.0f + 0.5f);
+                          g += (h >= row) ? '#' : ' ';
+                        }
+                        g += "\n";
+                      }
+                      if (id(current_coin) == 0) lv_label_set_text(id(graph_ascii), g.c_str());
+                    }
+                  } else {
+                    id(status_line).publish_state("BTC parse error");
+                  }
+          on_error:
+            then:
+              - lambda: id(status_line).publish_state("BTC HTTP error");
+
+      # ETH
+      - http_request.get:
+          url: https://api.binance.com/api/v3/ticker/24hr?symbol=ETHUSDT
+          request_headers: { Accept: application/json }
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  StaticJsonDocument<1024> doc;
+                  DeserializationError err = deserializeJson(doc, body);
+                  if (!err) {
+                    const char* lp = doc["lastPrice"] | "0";
+                    const char* pc = doc["priceChangePercent"] | "0";
+                    double price = atof(lp);
+                    double pct   = atof(pc);
+                    double dkk   = price * id(usd2dkk);
+
+                    char out[96];
+                    if (id(colorize_pct)) {
+                      const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
+                      snprintf(out, sizeof(out), "DKK %.2f  (%s %+.2f%%#)", dkk, col, pct);
+                    } else {
+                      snprintf(out, sizeof(out), "DKK %.2f  (%+.2f%%)", dkk, pct);
+                    }
+                    id(eth_line).publish_state(out);
+
+                    // Alerts
+                    {
+                      float thr = id(alert_threshold_eth);
+                      bool en   = id(alert_enabled_eth);
+                      bool &fired = id(alert_fired_eth);
+                      if (en) {
+                        if (!fired && fabs(pct) >= thr) {
+                          fired = true;
+                          char s[64]; snprintf(s, sizeof(s), "ALERT: ETH %+.2f%% (>= %.1f%%)", pct, thr);
+                          id(status_line).publish_state(s);
+                        } else if (fired && fabs(pct) < thr*0.8f) {
+                          fired = false;
+                        }
+                      } else {
+                        fired = false;
+                      }
+                    }
+
+                    // ---- ETH sparkline ----
+                    static float hist_eth[40]; static int len_eth=0, idx_eth=0;
+                    {
+                      const int cap=40;
+                      if (len_eth < cap) hist_eth[len_eth++] = dkk; else { hist_eth[idx_eth] = dkk; idx_eth = (idx_eth + 1) % cap; }
+                      const int n=len_eth, start=(n<cap)?0:idx_eth;
+                      float mn=hist_eth[start], mx=hist_eth[start];
+                      for (int k=1;k<n;k++){ float v=hist_eth[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
+                      if (mx-mn<1e-6f) mx = mn + 1.0f;
+                      std::string g; g.reserve((n+1)*8);
+                      for (int row=7; row>=0; --row){
+                        for (int k=0;k<n;k++){ float v=hist_eth[(start+k)%cap]; float t=(v-mn)/(mx-mn); int h=(int)(t*7.0f+0.5f); g += (h>=row)?'#':' '; }
+                        g += "\n";
+                      }
+                      if (id(current_coin) == 1) lv_label_set_text(id(graph_ascii), g.c_str());
+                    }
+                  } else {
+                    id(status_line).publish_state("ETH parse error");
+                  }
+          on_error:
+            then:
+              - lambda: id(status_line).publish_state("ETH HTTP error");
+
+      # SOL
+      - http_request.get:
+          url: https://api.binance.com/api/v3/ticker/24hr?symbol=SOLUSDT
+          request_headers: { Accept: application/json }
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  StaticJsonDocument<1024> doc;
+                  DeserializationError err = deserializeJson(doc, body);
+                  if (!err) {
+                    const char* lp = doc["lastPrice"] | "0";
+                    const char* pc = doc["priceChangePercent"] | "0";
+                    double price = atof(lp);
+                    double pct   = atof(pc);
+                    double dkk   = price * id(usd2dkk);
+
+                    char out[96];
+                    if (id(colorize_pct)) {
+                      const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
+                      snprintf(out, sizeof(out), "DKK %.2f  (%s %+.2f%%#)", dkk, col, pct);
+                    } else {
+                      snprintf(out, sizeof(out), "DKK %.2f  (%+.2f%%)", dkk, pct);
+                    }
+                    id(sol_line).publish_state(out);
+
+                    // Alerts
+                    {
+                      float thr = id(alert_threshold_sol);
+                      bool en   = id(alert_enabled_sol);
+                      bool &fired = id(alert_fired_sol);
+                      if (en) {
+                        if (!fired && fabs(pct) >= thr) {
+                          fired = true;
+                          char s[64]; snprintf(s, sizeof(s), "ALERT: SOL %+.2f%% (>= %.1f%%)", pct, thr);
+                          id(status_line).publish_state(s);
+                        } else if (fired && fabs(pct) < thr*0.8f) {
+                          fired = false;
+                        }
+                      } else {
+                        fired = false;
+                      }
+                    }
+
+                    // ---- SOL sparkline ----
+                    static float hist_sol[40]; static int len_sol=0, idx_sol=0;
+                    {
+                      const int cap=40;
+                      if (len_sol < cap) hist_sol[len_sol++] = dkk; else { hist_sol[idx_sol] = dkk; idx_sol = (idx_sol + 1) % cap; }
+                      const int n=len_sol, start=(n<cap)?0:idx_sol;
+                      float mn=hist_sol[start], mx=hist_sol[start];
+                      for (int k=1;k<n;k++){ float v=hist_sol[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
+                      if (mx-mn<1e-6f) mx = mn + 1.0f;
+                      std::string g; g.reserve((n+1)*8);
+                      for (int row=7; row>=0; --row){
+                        for (int k=0;k<n;k++){ float v=hist_sol[(start+k)%cap]; float t=(v-mn)/(mx-mn); int h=(int)(t*7.0f+0.5f); g += (h>=row)?'#':' '; }
+                        g += "\n";
+                      }
+                      if (id(current_coin) == 2) lv_label_set_text(id(graph_ascii), g.c_str());
+                    }
+                  } else {
+                    id(status_line).publish_state("SOL parse error");
+                  }
+          on_error:
+            then:
+              - lambda: id(status_line).publish_state("SOL HTTP error");
+
+      # ADA
+      - http_request.get:
+          url: https://api.binance.com/api/v3/ticker/24hr?symbol=ADAUSDT
+          request_headers: { Accept: application/json }
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  StaticJsonDocument<1024> doc;
+                  DeserializationError err = deserializeJson(doc, body);
+                  if (!err) {
+                    const char* lp = doc["lastPrice"] | "0";
+                    const char* pc = doc["priceChangePercent"] | "0";
+                    double price = atof(lp);
+                    double pct   = atof(pc);
+                    double dkk   = price * id(usd2dkk);
+
+                    char out[96];
+                    if (id(colorize_pct)) {
+                      const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
+                      snprintf(out, sizeof(out), "DKK %.2f  (%s %+.2f%%#)", dkk, col, pct);
+                    } else {
+                      snprintf(out, sizeof(out), "DKK %.2f  (%+.2f%%)", dkk, pct);
+                    }
+                    id(ada_line).publish_state(out);
+
+                    // Alerts
+                    {
+                      float thr = id(alert_threshold_ada);
+                      bool en   = id(alert_enabled_ada);
+                      bool &fired = id(alert_fired_ada);
+                      if (en) {
+                        if (!fired && fabs(pct) >= thr) {
+                          fired = true;
+                          char s[64]; snprintf(s, sizeof(s), "ALERT: ADA %+.2f%% (>= %.1f%%)", pct, thr);
+                          id(status_line).publish_state(s);
+                        } else if (fired && fabs(pct) < thr*0.8f) {
+                          fired = false;
+                        }
+                      } else {
+                        fired = false;
+                      }
+                    }
+
+                    // ---- ADA sparkline ----
+                    static float hist_ada[40]; static int len_ada=0, idx_ada=0;
+                    {
+                      const int cap=40;
+                      if (len_ada < cap) hist_ada[len_ada++] = dkk; else { hist_ada[idx_ada] = dkk; idx_ada = (idx_ada + 1) % cap; }
+                      const int n=len_ada, start=(n<cap)?0:idx_ada;
+                      float mn=hist_ada[start], mx=hist_ada[start];
+                      for (int k=1;k<n;k++){ float v=hist_ada[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
+                      if (mx-mn<1e-6f) mx = mn + 1.0f;
+                      std::string g; g.reserve((n+1)*8);
+                      for (int row=7; row>=0; --row){
+                        for (int k=0;k<n;k++){ float v=hist_ada[(start+k)%cap]; float t=(v-mn)/(mx-mn); int h=(int)(t*7.0f+0.5f); g += (h>=row)?'#':' '; }
+                        g += "\n";
+                      }
+                      if (id(current_coin) == 3) lv_label_set_text(id(graph_ascii), g.c_str());
+                    }
+                  } else {
+                    id(status_line).publish_state("ADA parse error");
+                  }
+          on_error:
+            then:
+              - lambda: id(status_line).publish_state("ADA HTTP error");
+
+      # BNB
+      - http_request.get:
+          url: https://api.binance.com/api/v3/ticker/24hr?symbol=BNBUSDT
+          request_headers: { Accept: application/json }
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  StaticJsonDocument<1024> doc;
+                  DeserializationError err = deserializeJson(doc, body);
+                  if (!err) {
+                    const char* lp = doc["lastPrice"] | "0";
+                    const char* pc = doc["priceChangePercent"] | "0";
+                    double price = atof(lp);
+                    double pct   = atof(pc);
+                    double dkk   = price * id(usd2dkk);
+
+                    char out[96];
+                    if (id(colorize_pct)) {
+                      const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
+                      snprintf(out, sizeof(out), "DKK %.2f  (%s %+.2f%%#)", dkk, col, pct);
+                    } else {
+                      snprintf(out, sizeof(out), "DKK %.2f  (%+.2f%%)", dkk, pct);
+                    }
+                    id(bnb_line).publish_state(out);
+
+                    // Alerts
+                    {
+                      float thr = id(alert_threshold_bnb);
+                      bool en   = id(alert_enabled_bnb);
+                      bool &fired = id(alert_fired_bnb);
+                      if (en) {
+                        if (!fired && fabs(pct) >= thr) {
+                          fired = true;
+                          char s[64]; snprintf(s, sizeof(s), "ALERT: BNB %+.2f%% (>= %.1f%%)", pct, thr);
+                          id(status_line).publish_state(s);
+                        } else if (fired && fabs(pct) < thr*0.8f) {
+                          fired = false;
+                        }
+                      } else {
+                        fired = false;
+                      }
+                    }
+
+                    // ---- BNB sparkline ----
+                    static float hist_bnb[40]; static int len_bnb=0, idx_bnb=0;
+                    {
+                      const int cap=40;
+                      if (len_bnb < cap) hist_bnb[len_bnb++] = dkk; else { hist_bnb[idx_bnb] = dkk; idx_bnb = (idx_bnb + 1) % cap; }
+                      const int n=len_bnb, start=(n<cap)?0:idx_bnb;
+                      float mn=hist_bnb[start], mx=hist_bnb[start];
+                      for (int k=1;k<n;k++){ float v=hist_bnb[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
+                      if (mx-mn<1e-6f) mx = mn + 1.0f;
+                      std::string g; g.reserve((n+1)*8);
+                      for (int row=7; row>=0; --row){
+                        for (int k=0;k<n;k++){ float v=hist_bnb[(start+k)%cap]; float t=(v-mn)/(mx-mn); int h=(int)(t*7.0f+0.5f); g += (h>=row)?'#':' '; }
+                        g += "\n";
+                      }
+                      if (id(current_coin) == 4) lv_label_set_text(id(graph_ascii), g.c_str());
+                    }
+                  } else {
+                    id(status_line).publish_state("BNB parse error");
+                  }
+          on_error:
+            then:
+              - lambda: id(status_line).publish_state("BNB HTTP error");
+
+# Refresh every 60 s — but don't pile up if a fetch is still running
+interval:
+  - interval: 60s
+    then:
+      - if:
+          condition:
+            not:
+              script.is_running: fetch_prices
+          then:
+            - script.execute: fetch_prices
