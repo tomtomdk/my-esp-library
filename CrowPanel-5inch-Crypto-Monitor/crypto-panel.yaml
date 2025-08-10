@@ -63,7 +63,7 @@ i2c:
 touchscreen:
   - platform: gt911
     id: touch
-    address: 0x5D        # (=93). If logs don’t find it, try 0x14.
+    address: 0x5D
 
 # CrowPanel S3 RGB display
 display:
@@ -80,7 +80,7 @@ display:
     pclk_pin: 0
     pclk_frequency: 16MHz
     pclk_inverted: true
-    # Stable 800x480 timings
+    # 800x480 timings
     hsync_back_porch: 40
     hsync_pulse_width: 48
     hsync_front_porch: 40
@@ -103,6 +103,7 @@ lvgl:
       - lvgl.widget.show: boot_blocker
       - delay: 1000ms
       - lambda: |-
+          // stop any scroll behavior and reset Y
           lv_obj_clear_flag(id(root), LV_OBJ_FLAG_SCROLLABLE);
           lv_obj_clear_flag(id(page_prices), LV_OBJ_FLAG_SCROLLABLE);
           lv_obj_clear_flag(id(page_info), LV_OBJ_FLAG_SCROLLABLE);
@@ -114,10 +115,23 @@ lvgl:
           lv_obj_set_y(id(page_prices), 0);
           lv_obj_set_y(id(nav_bar), 416);
 
-          // Reflect saved toggle state on the switch
+          // Reflect saved colorize toggle
           if (lv_obj_is_valid(id(sw_colorize))) {
             if (id(colorize_pct)) lv_obj_add_state(id(sw_colorize), LV_STATE_CHECKED);
             else                  lv_obj_clear_state(id(sw_colorize), LV_STATE_CHECKED);
+          }
+
+          // Reflect saved currency on Settings label and Prices title
+          {
+            static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
+            int idx = id(cur_idx);
+            if (idx < 0 || idx > 5) idx = 0;
+            const char* cur = CURS[idx];
+            if (lv_obj_is_valid(id(lbl_currency))) lv_label_set_text(id(lbl_currency), cur);
+            if (lv_obj_is_valid(id(title))) {
+              char ttl[32]; snprintf(ttl, sizeof(ttl), "Crypto (%s)", cur);
+              lv_label_set_text(id(title), ttl);
+            }
           }
       - lvgl.widget.hide: boot_blocker
 
@@ -143,7 +157,7 @@ lvgl:
               x: 0
               y: 0
               width: 800
-              height: 416            # 480 - 64 (nav)
+              height: 416
               bg_opa: "0%"
               scrollbar_mode: "OFF"
               scroll_chain: "OFF"
@@ -164,7 +178,7 @@ lvgl:
                 - label: { id: ada_name, x: 20,  y: 240, text: "Cardano (ADA)",  text_color: 0xA3B8D1, text_font: "montserrat_22" }
                 - label: { id: bnb_name, x: 20,  y: 300, text: "BNB (BNB)",      text_color: 0xA3B8D1, text_font: "montserrat_22" }
 
-                # Right column: values
+                # Right column: values (recolor enabled)
                 - label: { id: btc_val, x: 330, y: 60,  text: "-", text_color: 0xE2E8F0, text_font: "montserrat_28", recolor: true }
                 - label: { id: eth_val, x: 330, y: 120, text: "-", text_color: 0xE2E8F0, text_font: "montserrat_28", recolor: true }
                 - label: { id: sol_val, x: 330, y: 180, text: "-", text_color: 0xE2E8F0, text_font: "montserrat_28", recolor: true }
@@ -241,6 +255,41 @@ lvgl:
                     y: 156
                     width: 80
                     height: 32
+
+                - label:
+                    x: 220
+                    y: 210
+                    text: "Currency"
+                    text_color: 0xE2E8F0
+                    text_font: "montserrat_22"
+
+                - button:
+                    id: btn_cur_left
+                    x: 480
+                    y: 204
+                    width: 40
+                    height: 40
+                    radius: 6
+                    widgets:
+                      - label: { align: "CENTER", text: "◀", text_font: "montserrat_22" }
+
+                - label:
+                    id: lbl_currency
+                    x: 530
+                    y: 210
+                    text: "DKK"
+                    text_color: 0xE2E8F0
+                    text_font: "montserrat_22"
+
+                - button:
+                    id: btn_cur_right
+                    x: 620
+                    y: 204
+                    width: 40
+                    height: 40
+                    radius: 6
+                    widgets:
+                      - label: { align: "CENTER", text: "▶", text_font: "montserrat_22" }
 
           # ---------- Coin Detail Page ----------
           - obj:
@@ -388,7 +437,8 @@ text_sensor:
   - platform: template
     id: status_line
     on_value: [lvgl.label.update: { id: status, text: !lambda 'return x;' }]
-   # Page Info
+
+  # Page Info
   - platform: template
     id: info_last_line
     on_value: [lvgl.label.update: { id: info_last, text: !lambda 'return x;' }]
@@ -448,7 +498,6 @@ sensor:
             if (d) snprintf(buf, sizeof(buf), "Uptime: %ud %02u:%02u", d, h, m);
             else   snprintf(buf, sizeof(buf), "Uptime: %02u:%02u", h, m);
             id(info_uptime_line).publish_state(buf);
-
 
 # Bottom nav button clicks -> page switching
 binary_sensor:
@@ -632,6 +681,36 @@ binary_sensor:
               case 4: apply(id(alert_threshold_bnb)); break;
             }
 
+  # ---- Settings: Currency left/right ----
+  - platform: lvgl
+    id: bs_cur_left
+    widget: btn_cur_left
+    on_click:
+      then:
+        - lambda: |-
+            static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
+            const int N = 6;
+            id(cur_idx) = (id(cur_idx) - 1 + N) % N;
+            const char* cur = CURS[id(cur_idx)];
+            lv_label_set_text(id(lbl_currency), cur);
+            char ttl[32]; snprintf(ttl, sizeof(ttl), "Crypto (%s)", cur);
+            lv_label_set_text(id(title), ttl);
+        - script.execute: fetch_prices
+
+  - platform: lvgl
+    id: bs_cur_right
+    widget: btn_cur_right
+    on_click:
+      then:
+        - lambda: |-
+            static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
+            const int N = 6;
+            id(cur_idx) = (id(cur_idx) + 1) % N;
+            const char* cur = CURS[id(cur_idx)];
+            lv_label_set_text(id(lbl_currency), cur);
+            char ttl[32]; snprintf(ttl, sizeof(ttl), "Crypto (%s)", cur);
+            lv_label_set_text(id(title), ttl);
+        - script.execute: fetch_prices
 
 # Manual refresh button in HA
 button:
@@ -647,7 +726,7 @@ http_request:
   verify_ssl: false
   timeout: 7000ms
 
-# USD->DKK cached + toggles + alert state
+# USD->[selected] rate + toggles + alert state
 globals:
   - id: usd2dkk
     type: float
@@ -731,14 +810,29 @@ globals:
     restore_value: no
     initial_value: 'false'
 
+  # Currency selection index
+  - id: cur_idx
+    type: int
+    restore_value: yes
+    initial_value: '0'   # 0=DKK, 1=EUR, 2=USD, 3=SEK, 4=NOK, 5=GBP
+
 # ====================== Data Fetch ======================
 script:
+  # 1) Get USD->[selected currency] via Frankfurter
   - id: fetch_prices
     mode: queued
     then:
       - lvgl.label.update: { id: status, text: "FX..." }
       - http_request.get:
-          url: https://api.frankfurter.app/latest?from=USD&to=DKK
+          url: !lambda |-
+            static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
+            int idx = id(cur_idx);
+            if (idx < 0 || idx > 5) idx = 0;
+            char buf[96];
+            snprintf(buf, sizeof(buf),
+                     "https://api.frankfurter.app/latest?from=USD&to=%s",
+                     CURS[idx]);
+            return std::string(buf);
           request_headers: { Accept: application/json }
           capture_response: true
           on_response:
@@ -746,28 +840,45 @@ script:
               - lambda: |-
                   ESP_LOGD("crypto", "FX body: %s", body.c_str());
                   bool ok = false;
-                  json::parse_json(body, [&ok](JsonObject root) -> bool {
-                    if (root["rates"] && root["rates"]["DKK"]) {
-                      id(usd2dkk) = root["rates"]["DKK"].as<float>();
-                      ok = true;
-                    }
-                    return true;
-                  });
+                  static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
+                  int idx = id(cur_idx);
+                  if (idx < 0 || idx > 5) idx = 0;
+                  const char* cur = CURS[idx];
 
-                  // 👉 Publish to Info tab right after we've updated usd2dkk
-                  if (ok) {
-                    char fx[48];
-                    snprintf(fx, sizeof(fx), "USD->DKK: %.4f", id(usd2dkk));
-                    id(info_fx_line).publish_state(fx);
-                  } else {
-                    id(info_fx_line).publish_state("USD->DKK: —");
+                  StaticJsonDocument<512> doc;
+                  DeserializationError e = deserializeJson(doc, body);
+                  if (!e && doc["rates"][cur]) {
+                    id(usd2dkk) = doc["rates"][cur].as<float>();  // USD->[cur]
+                    ok = true;
                   }
 
-                  ESP_LOGD("crypto", "USD->DKK = %.4f", id(usd2dkk));
+                  // Update Info tab + title
+                  if (ok) {
+                    char fx[64];
+                    snprintf(fx, sizeof(fx), "USD->%s: %.4f", cur, id(usd2dkk));
+                    id(info_fx_line).publish_state(fx);
+                  } else {
+                    id(info_fx_line).publish_state("USD->?: —");
+                  }
+                  char ttl[32]; snprintf(ttl, sizeof(ttl), "Crypto (%s)", cur);
+                  lv_label_set_text(id(title), ttl);
+
+                  ESP_LOGD("crypto", "USD->%s = %.4f", cur, id(usd2dkk));
                   id(status_line).publish_state(ok ? "FX OK" : "FX parse error");
               - script.execute: fetch_coins
+          on_error:
+            then:
+              - lambda: |-
+                  id(status_line).publish_state("FX HTTP error (using cached FX)");
+                  static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
+                  int idx = id(cur_idx);
+                  if (idx < 0 || idx > 5) idx = 0;
+                  char fx[64];
+                  snprintf(fx, sizeof(fx), "USD->%s: %.4f", CURS[idx], id(usd2dkk));
+                  id(info_fx_line).publish_state(fx);
+              - script.execute: fetch_coins
 
-  # 2) Per-coin requests from Binance
+  # 2) Per-coin requests from Binance + colorize + alerts + ASCII sparkline
   - id: fetch_coins
     then:
       - lvgl.label.update: { id: status, text: "Prices..." }
@@ -787,14 +898,17 @@ script:
                     const char* pc = doc["priceChangePercent"] | "0";
                     double price = atof(lp);
                     double pct   = atof(pc);
-                    double dkk   = price * id(usd2dkk);
+                    double fiat  = price * id(usd2dkk);
+
+                    static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
+                    const char* cur = CURS[id(cur_idx)];
 
                     char out[96];
                     if (id(colorize_pct)) {
                       const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
-                      snprintf(out, sizeof(out), "DKK %.2f  (%s %+.2f%%#)", dkk, col, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%s %+.2f%%#)", cur, fiat, col, pct);
                     } else {
-                      snprintf(out, sizeof(out), "DKK %.2f  (%+.2f%%)", dkk, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur, fiat, pct);
                     }
                     id(btc_line).publish_state(out);
 
@@ -816,27 +930,18 @@ script:
                       }
                     }
 
-                    // ---- BTC sparkline history + render (40 samples, 8 rows) ----
+                    // Sparkline
                     static float hist_btc[40]; static int len_btc=0, idx_btc=0;
                     {
-                      // push latest
                       const int cap = 40;
-                      if (len_btc < cap) hist_btc[len_btc++] = dkk; else { hist_btc[idx_btc] = dkk; idx_btc = (idx_btc + 1) % cap; }
-
-                      const int n = len_btc;
-                      const int start = (n < cap) ? 0 : idx_btc;  // oldest index
-                      float mn = hist_btc[start], mx = hist_btc[start];
+                      if (len_btc < cap) hist_btc[len_btc++] = fiat; else { hist_btc[idx_btc] = fiat; idx_btc = (idx_btc + 1) % cap; }
+                      const int n = len_btc, start = (n<cap)?0:idx_btc;
+                      float mn=hist_btc[start], mx=hist_btc[start];
                       for (int k=1;k<n;k++){ float v=hist_btc[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
-                      if (mx - mn < 1e-6f) mx = mn + 1.0f;
-
+                      if (mx-mn<1e-6f) mx = mn + 1.0f;
                       std::string g; g.reserve((n+1)*8);
-                      for (int row = 7; row >= 0; --row) {
-                        for (int k=0;k<n;k++){
-                          float v = hist_btc[(start+k)%cap];
-                          float t = (v - mn) / (mx - mn);
-                          int   h = (int)(t*7.0f + 0.5f);
-                          g += (h >= row) ? '#' : ' ';
-                        }
+                      for (int row=7; row>=0; --row){
+                        for (int k=0;k<n;k++){ float v=hist_btc[(start+k)%cap]; float t=(v-mn)/(mx-mn); int h=(int)(t*7.0f+0.5f); g += (h>=row)?'#':' '; }
                         g += "\n";
                       }
                       if (id(current_coin) == 0) lv_label_set_text(id(graph_ascii), g.c_str());
@@ -863,14 +968,17 @@ script:
                     const char* pc = doc["priceChangePercent"] | "0";
                     double price = atof(lp);
                     double pct   = atof(pc);
-                    double dkk   = price * id(usd2dkk);
+                    double fiat  = price * id(usd2dkk);
+
+                    static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
+                    const char* cur = CURS[id(cur_idx)];
 
                     char out[96];
                     if (id(colorize_pct)) {
                       const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
-                      snprintf(out, sizeof(out), "DKK %.2f  (%s %+.2f%%#)", dkk, col, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%s %+.2f%%#)", cur, fiat, col, pct);
                     } else {
-                      snprintf(out, sizeof(out), "DKK %.2f  (%+.2f%%)", dkk, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur, fiat, pct);
                     }
                     id(eth_line).publish_state(out);
 
@@ -892,11 +1000,11 @@ script:
                       }
                     }
 
-                    // ---- ETH sparkline ----
+                    // Sparkline
                     static float hist_eth[40]; static int len_eth=0, idx_eth=0;
                     {
                       const int cap=40;
-                      if (len_eth < cap) hist_eth[len_eth++] = dkk; else { hist_eth[idx_eth] = dkk; idx_eth = (idx_eth + 1) % cap; }
+                      if (len_eth < cap) hist_eth[len_eth++] = fiat; else { hist_eth[idx_eth] = fiat; idx_eth = (idx_eth + 1) % cap; }
                       const int n=len_eth, start=(n<cap)?0:idx_eth;
                       float mn=hist_eth[start], mx=hist_eth[start];
                       for (int k=1;k<n;k++){ float v=hist_eth[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
@@ -930,14 +1038,17 @@ script:
                     const char* pc = doc["priceChangePercent"] | "0";
                     double price = atof(lp);
                     double pct   = atof(pc);
-                    double dkk   = price * id(usd2dkk);
+                    double fiat  = price * id(usd2dkk);
+
+                    static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
+                    const char* cur = CURS[id(cur_idx)];
 
                     char out[96];
                     if (id(colorize_pct)) {
                       const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
-                      snprintf(out, sizeof(out), "DKK %.2f  (%s %+.2f%%#)", dkk, col, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%s %+.2f%%#)", cur, fiat, col, pct);
                     } else {
-                      snprintf(out, sizeof(out), "DKK %.2f  (%+.2f%%)", dkk, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur, fiat, pct);
                     }
                     id(sol_line).publish_state(out);
 
@@ -959,11 +1070,11 @@ script:
                       }
                     }
 
-                    // ---- SOL sparkline ----
+                    // Sparkline
                     static float hist_sol[40]; static int len_sol=0, idx_sol=0;
                     {
                       const int cap=40;
-                      if (len_sol < cap) hist_sol[len_sol++] = dkk; else { hist_sol[idx_sol] = dkk; idx_sol = (idx_sol + 1) % cap; }
+                      if (len_sol < cap) hist_sol[len_sol++] = fiat; else { hist_sol[idx_sol] = fiat; idx_sol = (idx_sol + 1) % cap; }
                       const int n=len_sol, start=(n<cap)?0:idx_sol;
                       float mn=hist_sol[start], mx=hist_sol[start];
                       for (int k=1;k<n;k++){ float v=hist_sol[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
@@ -997,14 +1108,17 @@ script:
                     const char* pc = doc["priceChangePercent"] | "0";
                     double price = atof(lp);
                     double pct   = atof(pc);
-                    double dkk   = price * id(usd2dkk);
+                    double fiat  = price * id(usd2dkk);
+
+                    static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
+                    const char* cur = CURS[id(cur_idx)];
 
                     char out[96];
                     if (id(colorize_pct)) {
                       const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
-                      snprintf(out, sizeof(out), "DKK %.2f  (%s %+.2f%%#)", dkk, col, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%s %+.2f%%#)", cur, fiat, col, pct);
                     } else {
-                      snprintf(out, sizeof(out), "DKK %.2f  (%+.2f%%)", dkk, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur, fiat, pct);
                     }
                     id(ada_line).publish_state(out);
 
@@ -1026,11 +1140,10 @@ script:
                       }
                     }
 
-                    // ---- ADA sparkline ----
                     static float hist_ada[40]; static int len_ada=0, idx_ada=0;
                     {
                       const int cap=40;
-                      if (len_ada < cap) hist_ada[len_ada++] = dkk; else { hist_ada[idx_ada] = dkk; idx_ada = (idx_ada + 1) % cap; }
+                      if (len_ada < cap) hist_ada[len_ada++] = fiat; else { hist_ada[idx_ada] = fiat; idx_ada = (idx_ada + 1) % cap; }
                       const int n=len_ada, start=(n<cap)?0:idx_ada;
                       float mn=hist_ada[start], mx=hist_ada[start];
                       for (int k=1;k<n;k++){ float v=hist_ada[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
@@ -1064,14 +1177,17 @@ script:
                     const char* pc = doc["priceChangePercent"] | "0";
                     double price = atof(lp);
                     double pct   = atof(pc);
-                    double dkk   = price * id(usd2dkk);
+                    double fiat  = price * id(usd2dkk);
+
+                    static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
+                    const char* cur = CURS[id(cur_idx)];
 
                     char out[96];
                     if (id(colorize_pct)) {
                       const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
-                      snprintf(out, sizeof(out), "DKK %.2f  (%s %+.2f%%#)", dkk, col, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%s %+.2f%%#)", cur, fiat, col, pct);
                     } else {
-                      snprintf(out, sizeof(out), "DKK %.2f  (%+.2f%%)", dkk, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur, fiat, pct);
                     }
                     id(bnb_line).publish_state(out);
 
@@ -1093,11 +1209,11 @@ script:
                       }
                     }
 
-                    // ---- BNB sparkline ----
+                    // Sparkline
                     static float hist_bnb[40]; static int len_bnb=0, idx_bnb=0;
                     {
                       const int cap=40;
-                      if (len_bnb < cap) hist_bnb[len_bnb++] = dkk; else { hist_bnb[idx_bnb] = dkk; idx_bnb = (idx_bnb + 1) % cap; }
+                      if (len_bnb < cap) hist_bnb[len_bnb++] = fiat; else { hist_bnb[idx_bnb] = fiat; idx_bnb = (idx_bnb + 1) % cap; }
                       const int n=len_bnb, start=(n<cap)?0:idx_bnb;
                       float mn=hist_bnb[start], mx=hist_bnb[start];
                       for (int k=1;k<n;k++){ float v=hist_bnb[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
@@ -1110,7 +1226,7 @@ script:
                       if (id(current_coin) == 4) lv_label_set_text(id(graph_ascii), g.c_str());
                     }
 
-                    // ---- Stamp "Last update" on Info tab ----
+                    // Stamp "Last update" on Info tab
                     {
                       auto now = id(ntp).now();
                       if (now.is_valid()) {
@@ -1126,7 +1242,6 @@ script:
             then:
               - lambda: |-
                   id(status_line).publish_state("BNB HTTP error");
-                  // Also stamp attempt time on error
                   auto now = id(ntp).now();
                   if (now.is_valid()) {
                     char t[48];
