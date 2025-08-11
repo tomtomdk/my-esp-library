@@ -318,16 +318,18 @@ lvgl:
                     bg_opa: "100%"
                     scrollable: false
                     widgets:
-                      - label:
-                          id: graph_ascii
+                      - line:
+                          id: chart_line
                           x: 12
                           y: 12
                           width: 736
                           height: 176
-                          text: "Waiting for data..."
-                          text_color: 0xE2E8F0
-                          text_font: "montserrat_20"
-                          long_mode: "WRAP"
+                          points:
+                            - "0, 176"
+                            - "1, 175"
+                          line_width: 6   # optional if supported
+                          line_color: 0x60A5FA
+                          line_rounded: true
 
                 # Alerts controls
                 - label: { x: 20,  y: 330, text: "Alert when |%| ≥", text_color: 0xA3B8D1, text_font: "montserrat_20" }
@@ -558,6 +560,7 @@ binary_sensor:
             { char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", id(alert_threshold_btc)); lv_label_set_text(id(alert_threshold_lbl), buf); }
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
+        - script.execute: fetch_prices
 
   - platform: lvgl
     id: bs_row_eth
@@ -573,6 +576,7 @@ binary_sensor:
             { char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", id(alert_threshold_eth)); lv_label_set_text(id(alert_threshold_lbl), buf); }
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
+        - script.execute: fetch_prices
 
   - platform: lvgl
     id: bs_row_sol
@@ -588,6 +592,7 @@ binary_sensor:
             { char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", id(alert_threshold_sol)); lv_label_set_text(id(alert_threshold_lbl), buf); }
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
+        - script.execute: fetch_prices
 
   - platform: lvgl
     id: bs_row_ada
@@ -603,6 +608,7 @@ binary_sensor:
             { char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", id(alert_threshold_ada)); lv_label_set_text(id(alert_threshold_lbl), buf); }
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
+        - script.execute: fetch_prices
 
   - platform: lvgl
     id: bs_row_bnb
@@ -618,6 +624,7 @@ binary_sensor:
             { char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", id(alert_threshold_bnb)); lv_label_set_text(id(alert_threshold_lbl), buf); }
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
+        - script.execute: fetch_prices
 
   # ---- Coin detail: back + controls ----
   - platform: lvgl
@@ -878,7 +885,7 @@ script:
                   id(info_fx_line).publish_state(fx);
               - script.execute: fetch_coins
 
-  # 2) Per-coin requests from Binance + colorize + alerts + ASCII sparkline
+  # 2) Per-coin requests from Binance + colorize + alerts + LVGL line chart
   - id: fetch_coins
     then:
       - lvgl.label.update: { id: status, text: "Prices..." }
@@ -930,21 +937,33 @@ script:
                       }
                     }
 
-                    // Sparkline
+                    // ---- BTC line chart (40 samples) ----
                     static float hist_btc[40]; static int len_btc=0, idx_btc=0;
                     {
                       const int cap = 40;
-                      if (len_btc < cap) hist_btc[len_btc++] = fiat; else { hist_btc[idx_btc] = fiat; idx_btc = (idx_btc + 1) % cap; }
-                      const int n = len_btc, start = (n<cap)?0:idx_btc;
-                      float mn=hist_btc[start], mx=hist_btc[start];
-                      for (int k=1;k<n;k++){ float v=hist_btc[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
-                      if (mx-mn<1e-6f) mx = mn + 1.0f;
-                      std::string g; g.reserve((n+1)*8);
-                      for (int row=7; row>=0; --row){
-                        for (int k=0;k<n;k++){ float v=hist_btc[(start+k)%cap]; float t=(v-mn)/(mx-mn); int h=(int)(t*7.0f+0.5f); g += (h>=row)?'#':' '; }
-                        g += "\n";
+                      if (len_btc < cap) hist_btc[len_btc++] = fiat;
+                      else { hist_btc[idx_btc] = fiat; idx_btc = (idx_btc + 1) % cap; }
+
+                      if (id(current_coin) == 0) {
+                        const int w = 736, h = 176;
+                        const int n = len_btc;
+                        if (n >= 2) {
+                          const int start = (n < cap) ? 0 : idx_btc;
+                          float mn = hist_btc[start], mx = mn;
+                          for (int k=1;k<n;k++){ float v=hist_btc[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
+                          if (mx - mn < 1e-6f) mx = mn + 1.0f;
+                          static lv_point_t pts[40];
+                          for (int k=0;k<n;k++){
+                            float v=hist_btc[(start+k)%cap];
+                            float t=(v-mn)/(mx-mn);
+                            int x=(int)((float)k*(w-1)/(n-1)+0.5f);
+                            int y=(int)((1.0f-t)*(h-1)+0.5f);
+                            pts[k].x=x; pts[k].y=y;
+                          }
+                          lv_obj_set_size(id(chart_line)->obj, w, h);
+                          lv_line_set_points(id(chart_line)->obj, pts, n);
+                        }
                       }
-                      if (id(current_coin) == 0) lv_label_set_text(id(graph_ascii), g.c_str());
                     }
                   } else {
                     id(status_line).publish_state("BTC parse error");
@@ -1000,21 +1019,31 @@ script:
                       }
                     }
 
-                    // Sparkline
+                    // ---- ETH line chart ----
                     static float hist_eth[40]; static int len_eth=0, idx_eth=0;
                     {
                       const int cap=40;
-                      if (len_eth < cap) hist_eth[len_eth++] = fiat; else { hist_eth[idx_eth] = fiat; idx_eth = (idx_eth + 1) % cap; }
-                      const int n=len_eth, start=(n<cap)?0:idx_eth;
-                      float mn=hist_eth[start], mx=hist_eth[start];
-                      for (int k=1;k<n;k++){ float v=hist_eth[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
-                      if (mx-mn<1e-6f) mx = mn + 1.0f;
-                      std::string g; g.reserve((n+1)*8);
-                      for (int row=7; row>=0; --row){
-                        for (int k=0;k<n;k++){ float v=hist_eth[(start+k)%cap]; float t=(v-mn)/(mx-mn); int h=(int)(t*7.0f+0.5f); g += (h>=row)?'#':' '; }
-                        g += "\n";
+                      if (len_eth < cap) hist_eth[len_eth++] = fiat;
+                      else { hist_eth[idx_eth] = fiat; idx_eth = (idx_eth + 1) % cap; }
+
+                      if (id(current_coin) == 1) {
+                        const int w=736, h=176, n=len_eth;
+                        if (n >= 2) {
+                          const int start=(n<cap)?0:idx_eth;
+                          float mn=hist_eth[start], mx=mn;
+                          for (int k=1;k<n;k++){ float v=hist_eth[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
+                          if (mx-mn<1e-6f) mx = mn + 1.0f;
+                          static lv_point_t pts[40];
+                          for (int k=0;k<n;k++){
+                            float v=hist_eth[(start+k)%cap], t=(v-mn)/(mx-mn);
+                            int x=(int)((float)k*(w-1)/(n-1)+0.5f);
+                            int y=(int)((1.0f-t)*(h-1)+0.5f);
+                            pts[k].x=x; pts[k].y=y;
+                          }
+                          lv_obj_set_size(id(chart_line)->obj, w, h);
+                          lv_line_set_points(id(chart_line)->obj, pts, n);
+                        }
                       }
-                      if (id(current_coin) == 1) lv_label_set_text(id(graph_ascii), g.c_str());
                     }
                   } else {
                     id(status_line).publish_state("ETH parse error");
@@ -1070,21 +1099,31 @@ script:
                       }
                     }
 
-                    // Sparkline
+                    // ---- SOL line chart ----
                     static float hist_sol[40]; static int len_sol=0, idx_sol=0;
                     {
                       const int cap=40;
-                      if (len_sol < cap) hist_sol[len_sol++] = fiat; else { hist_sol[idx_sol] = fiat; idx_sol = (idx_sol + 1) % cap; }
-                      const int n=len_sol, start=(n<cap)?0:idx_sol;
-                      float mn=hist_sol[start], mx=hist_sol[start];
-                      for (int k=1;k<n;k++){ float v=hist_sol[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
-                      if (mx-mn<1e-6f) mx = mn + 1.0f;
-                      std::string g; g.reserve((n+1)*8);
-                      for (int row=7; row>=0; --row){
-                        for (int k=0;k<n;k++){ float v=hist_sol[(start+k)%cap]; float t=(v-mn)/(mx-mn); int h=(int)(t*7.0f+0.5f); g += (h>=row)?'#':' '; }
-                        g += "\n";
+                      if (len_sol < cap) hist_sol[len_sol++] = fiat;
+                      else { hist_sol[idx_sol] = fiat; idx_sol = (idx_sol + 1) % cap; }
+
+                      if (id(current_coin) == 2) {
+                        const int w=736, h=176, n=len_sol;
+                        if (n >= 2) {
+                          const int start=(n<cap)?0:idx_sol;
+                          float mn=hist_sol[start], mx=mn;
+                          for (int k=1;k<n;k++){ float v=hist_sol[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
+                          if (mx-mn<1e-6f) mx = mn + 1.0f;
+                          static lv_point_t pts[40];
+                          for (int k=0;k<n;k++){
+                            float v=hist_sol[(start+k)%cap], t=(v-mn)/(mx-mn);
+                            int x=(int)((float)k*(w-1)/(n-1)+0.5f);
+                            int y=(int)((1.0f-t)*(h-1)+0.5f);
+                            pts[k].x=x; pts[k].y=y;
+                          }
+                          lv_obj_set_size(id(chart_line)->obj, w, h);
+                          lv_line_set_points(id(chart_line)->obj, pts, n);
+                        }
                       }
-                      if (id(current_coin) == 2) lv_label_set_text(id(graph_ascii), g.c_str());
                     }
                   } else {
                     id(status_line).publish_state("SOL parse error");
@@ -1140,20 +1179,31 @@ script:
                       }
                     }
 
+                    // ---- ADA line chart ----
                     static float hist_ada[40]; static int len_ada=0, idx_ada=0;
                     {
                       const int cap=40;
-                      if (len_ada < cap) hist_ada[len_ada++] = fiat; else { hist_ada[idx_ada] = fiat; idx_ada = (idx_ada + 1) % cap; }
-                      const int n=len_ada, start=(n<cap)?0:idx_ada;
-                      float mn=hist_ada[start], mx=hist_ada[start];
-                      for (int k=1;k<n;k++){ float v=hist_ada[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
-                      if (mx-mn<1e-6f) mx = mn + 1.0f;
-                      std::string g; g.reserve((n+1)*8);
-                      for (int row=7; row>=0; --row){
-                        for (int k=0;k<n;k++){ float v=hist_ada[(start+k)%cap]; float t=(v-mn)/(mx-mn); int h=(int)(t*7.0f+0.5f); g += (h>=row)?'#':' '; }
-                        g += "\n";
+                      if (len_ada < cap) hist_ada[len_ada++] = fiat;
+                      else { hist_ada[idx_ada] = fiat; idx_ada = (idx_ada + 1) % cap; }
+
+                      if (id(current_coin) == 3) {
+                        const int w=736, h=176, n=len_ada;
+                        if (n >= 2) {
+                          const int start=(n<cap)?0:idx_ada;
+                          float mn=hist_ada[start], mx=mn;
+                          for (int k=1;k<n;k++){ float v=hist_ada[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
+                          if (mx-mn<1e-6f) mx = mn + 1.0f;
+                          static lv_point_t pts[40];
+                          for (int k=0;k<n;k++){
+                            float v=hist_ada[(start+k)%cap], t=(v-mn)/(mx-mn);
+                            int x=(int)((float)k*(w-1)/(n-1)+0.5f);
+                            int y=(int)((1.0f-t)*(h-1)+0.5f);
+                            pts[k].x=x; pts[k].y=y;
+                          }
+                          lv_obj_set_size(id(chart_line)->obj, w, h);
+                          lv_line_set_points(id(chart_line)->obj, pts, n);
+                        }
                       }
-                      if (id(current_coin) == 3) lv_label_set_text(id(graph_ascii), g.c_str());
                     }
                   } else {
                     id(status_line).publish_state("ADA parse error");
@@ -1209,21 +1259,31 @@ script:
                       }
                     }
 
-                    // Sparkline
+                    // ---- BNB line chart ----
                     static float hist_bnb[40]; static int len_bnb=0, idx_bnb=0;
                     {
                       const int cap=40;
-                      if (len_bnb < cap) hist_bnb[len_bnb++] = fiat; else { hist_bnb[idx_bnb] = fiat; idx_bnb = (idx_bnb + 1) % cap; }
-                      const int n=len_bnb, start=(n<cap)?0:idx_bnb;
-                      float mn=hist_bnb[start], mx=hist_bnb[start];
-                      for (int k=1;k<n;k++){ float v=hist_bnb[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
-                      if (mx-mn<1e-6f) mx = mn + 1.0f;
-                      std::string g; g.reserve((n+1)*8);
-                      for (int row=7; row>=0; --row){
-                        for (int k=0;k<n;k++){ float v=hist_bnb[(start+k)%cap]; float t=(v-mn)/(mx-mn); int h=(int)(t*7.0f+0.5f); g += (h>=row)?'#':' '; }
-                        g += "\n";
+                      if (len_bnb < cap) hist_bnb[len_bnb++] = fiat;
+                      else { hist_bnb[idx_bnb] = fiat; idx_bnb = (idx_bnb + 1) % cap; }
+
+                      if (id(current_coin) == 4) {
+                        const int w=736, h=176, n=len_bnb;
+                        if (n >= 2) {
+                          const int start=(n<cap)?0:idx_bnb;
+                          float mn=hist_bnb[start], mx=mn;
+                          for (int k=1;k<n;k++){ float v=hist_bnb[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
+                          if (mx-mn<1e-6f) mx = mn + 1.0f;
+                          static lv_point_t pts[40];
+                          for (int k=0;k<n;k++){
+                            float v=hist_bnb[(start+k)%cap], t=(v-mn)/(mx-mn);
+                            int x=(int)((float)k*(w-1)/(n-1)+0.5f);
+                            int y=(int)((1.0f-t)*(h-1)+0.5f);
+                            pts[k].x=x; pts[k].y=y;
+                          }
+                          lv_obj_set_size(id(chart_line)->obj, w, h);
+                          lv_line_set_points(id(chart_line)->obj, pts, n);
+                        }
                       }
-                      if (id(current_coin) == 4) lv_label_set_text(id(graph_ascii), g.c_str());
                     }
 
                     // Stamp "Last update" on Info tab
