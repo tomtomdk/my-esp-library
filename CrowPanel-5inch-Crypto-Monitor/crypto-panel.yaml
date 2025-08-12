@@ -248,6 +248,15 @@ lvgl:
                           text: ""
                           text_color: 0xFFFFFF
                           text_font: "montserrat_22"
+                      # Transparent full-width button to allow dismiss on tap
+                      - button:
+                          id: btn_alert_dismiss
+                          x: 0
+                          y: 0
+                          width: 760
+                          height: 44
+                          radius: 6
+                          bg_opa: "0%"
 
           # ---------- Page: Info ----------
           - obj:
@@ -740,6 +749,16 @@ binary_sensor:
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
         - script.execute: fetch_prices
+
+  # ---- Alert bar: tap to dismiss ----
+  - platform: lvgl
+    id: bs_alert_dismiss
+    widget: btn_alert_dismiss
+    on_click:
+      then:
+        - lvgl.widget.hide: alert_bar
+        - lambda: |-
+            id(status_line).publish_state("Alert dismissed");
 
 # Manual refresh button in HA
 button:
@@ -1399,6 +1418,8 @@ script:
                     }
                     id(btc_line).publish_state(out);
 
+                    #ifdef __cplusplus
+                    #endif
                     // Alerts (price-based)
                     {
                       float thr   = id(alert_price_btc);
@@ -1767,6 +1788,8 @@ script:
                     }
                     id(bnb_line).publish_state(out);
 
+                    #ifdef __cplusplus
+                    #endif
                     // Alerts (price-based)
                     {
                       float thr   = id(alert_price_bnb);
