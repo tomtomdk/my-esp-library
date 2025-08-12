@@ -378,41 +378,6 @@ lvgl:
                           line_color: 0x60A5FA
                           line_rounded: true
 
-                # Alerts controls (price-based)
-                - label: { x: 20,  y: 330, text: "Alert when PRICE", text_color: 0xA3B8D1, text_font: "montserrat_20" }
-
-                - button:
-                    id: btn_alert_minus
-                    x: 230
-                    y: 322
-                    width: 40
-                    height: 40
-                    radius: 6
-                    widgets: [ { label: { align: "CENTER", text: "-", text_font: "montserrat_24" } } ]
-
-                - label: { id: alert_threshold_lbl, x: 280, y: 328, text: "≥ DKK 0.00", text_color: 0xE2E8F0, text_font: "montserrat_22" }
-
-                - button:
-                    id: btn_alert_plus
-                    x: 460
-                    y: 322
-                    width: 40
-                    height: 40
-                    radius: 6
-                    widgets: [ { label: { align: "CENTER", text: "+", text_font: "montserrat_24" } } ]
-
-                - button:
-                    id: btn_alert_dir
-                    x: 520
-                    y: 322
-                    width: 68
-                    height: 40
-                    radius: 6
-                    widgets: [ { label: { align: "CENTER", id: alert_dir_glyph, text: "≥", text_font: "montserrat_22" } } ]
-
-                - label: { x: 600, y: 330, text: "Enabled", text_color: 0xA3B8D1, text_font: "montserrat_20" }
-                - switch: { id: sw_alert_enabled, x: 690, y: 326, width: 80, height: 32 }
-
           # ---------- Bottom Nav Bar ----------
           - obj:
               id: nav_bar
@@ -628,18 +593,6 @@ binary_sensor:
             };
             lv_label_set_text(id(coin_title), pretty(id(sel_row1).state).c_str());
             lv_label_set_text(id(coin_price_line), lv_label_get_text(id(btc_val)));
-            if (id(alert_enabled_btc)) lv_obj_add_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            else lv_obj_clear_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            {
-              std::string cur = id(sel_currency).state;
-              int dir = id(alert_dir_btc);
-              float thr = id(alert_price_btc);
-              const char* op = (dir >= 0) ? "≥" : "≤";
-              char buf[48];
-              snprintf(buf, sizeof(buf), "%s %s %.2f", op, cur.c_str(), thr);
-              lv_label_set_text(id(alert_threshold_lbl), buf);
-              lv_label_set_text(id(alert_dir_glyph), op);
-            }
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
         - script.execute: fetch_prices
@@ -676,18 +629,6 @@ binary_sensor:
             };
             lv_label_set_text(id(coin_title), pretty(id(sel_row2).state).c_str());
             lv_label_set_text(id(coin_price_line), lv_label_get_text(id(eth_val)));
-            if (id(alert_enabled_eth)) lv_obj_add_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            else lv_obj_clear_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            {
-              std::string cur = id(sel_currency).state;
-              int dir = id(alert_dir_eth);
-              float thr = id(alert_price_eth);
-              const char* op = (dir >= 0) ? "≥" : "≤";
-              char buf[48];
-              snprintf(buf, sizeof(buf), "%s %s %.2f", op, cur.c_str(), thr);
-              lv_label_set_text(id(alert_threshold_lbl), buf);
-              lv_label_set_text(id(alert_dir_glyph), op);
-            }
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
         - script.execute: fetch_prices
@@ -724,18 +665,6 @@ binary_sensor:
             };
             lv_label_set_text(id(coin_title), pretty(id(sel_row3).state).c_str());
             lv_label_set_text(id(coin_price_line), lv_label_get_text(id(sol_val)));
-            if (id(alert_enabled_sol)) lv_obj_add_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            else lv_obj_clear_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            {
-              std::string cur = id(sel_currency).state;
-              int dir = id(alert_dir_sol);
-              float thr = id(alert_price_sol);
-              const char* op = (dir >= 0) ? "≥" : "≤";
-              char buf[48];
-              snprintf(buf, sizeof(buf), "%s %s %.2f", op, cur.c_str(), thr);
-              lv_label_set_text(id(alert_threshold_lbl), buf);
-              lv_label_set_text(id(alert_dir_glyph), op);
-            }
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
         - script.execute: fetch_prices
@@ -772,18 +701,6 @@ binary_sensor:
             };
             lv_label_set_text(id(coin_title), pretty(id(sel_row4).state).c_str());
             lv_label_set_text(id(coin_price_line), lv_label_get_text(id(ada_val)));
-            if (id(alert_enabled_ada)) lv_obj_add_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            else lv_obj_clear_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            {
-              std::string cur = id(sel_currency).state;
-              int dir = id(alert_dir_ada);
-              float thr = id(alert_price_ada);
-              const char* op = (dir >= 0) ? "≥" : "≤";
-              char buf[48];
-              snprintf(buf, sizeof(buf), "%s %s %.2f", op, cur.c_str(), thr);
-              lv_label_set_text(id(alert_threshold_lbl), buf);
-              lv_label_set_text(id(alert_dir_glyph), op);
-            }
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
         - script.execute: fetch_prices
@@ -820,161 +737,9 @@ binary_sensor:
             };
             lv_label_set_text(id(coin_title), pretty(id(sel_row5).state).c_str());
             lv_label_set_text(id(coin_price_line), lv_label_get_text(id(bnb_val)));
-            if (id(alert_enabled_bnb)) lv_obj_add_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            else lv_obj_clear_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            {
-              std::string cur = id(sel_currency).state;
-              int dir = id(alert_dir_bnb);
-              float thr = id(alert_price_bnb);
-              const char* op = (dir >= 0) ? "≥" : "≤";
-              char buf[48];
-              snprintf(buf, sizeof(buf), "%s %s %.2f", op, cur.c_str(), thr);
-              lv_label_set_text(id(alert_threshold_lbl), buf);
-              lv_label_set_text(id(alert_dir_glyph), op);
-            }
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
         - script.execute: fetch_prices
-
-  # ---- Coin detail: Alert enable switch ----
-  - platform: lvgl
-    id: bs_sw_alert_enabled
-    widget: sw_alert_enabled
-    on_click:
-      then:
-        - lambda: |-
-            bool on = lv_obj_has_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            switch (id(current_coin)) {
-              case 0: id(alert_enabled_btc) = on; break;
-              case 1: id(alert_enabled_eth) = on; break;
-              case 2: id(alert_enabled_sol) = on; break;
-              case 3: id(alert_enabled_ada) = on; break;
-              case 4: id(alert_enabled_bnb) = on; break;
-            }
-
-  # ---- Alerts: direction toggle ≥ / ≤ ----
-  - platform: lvgl
-    id: bs_alert_dir
-    widget: btn_alert_dir
-    on_click:
-      then:
-        - lambda: |-
-            auto apply=[&](int &dir, float thr){
-              dir = (dir >= 0) ? -1 : 1;
-              const char* op = (dir >= 0) ? "≥" : "≤";
-              lv_label_set_text(id(alert_dir_glyph), op);
-              std::string cur = id(sel_currency).state;
-              char b[48];
-              snprintf(b, sizeof(b), "%s %s %.2f", op, cur.c_str(), thr);
-              lv_label_set_text(id(alert_threshold_lbl), b);
-            };
-            switch (id(current_coin)) {
-              case 0: apply(id(alert_dir_btc), id(alert_price_btc)); break;
-              case 1: apply(id(alert_dir_eth), id(alert_price_eth)); break;
-              case 2: apply(id(alert_dir_sol), id(alert_price_sol)); break;
-              case 3: apply(id(alert_dir_ada), id(alert_price_ada)); break;
-              case 4: apply(id(alert_dir_bnb), id(alert_price_bnb)); break;
-            }
-
-  # ---- Alerts: adjust threshold price with +/- ----
-  - platform: lvgl
-    id: bs_alert_minus
-    widget: btn_alert_minus
-    on_click:
-      then:
-        - lambda: |-
-            auto step_for = [](float p)->float{
-              float a = fabsf(p);
-              if (a > 5000.f) return 100.f;
-              if (a > 1000.f) return 10.f;
-              if (a > 100.f)  return 1.f;
-              if (a > 10.f)   return 0.1f;
-              return 0.01f;
-            };
-            auto apply=[&](float &thr, float last, int dir){
-              float st = step_for(last > 0 ? last : 100.f);
-              thr -= st; if (thr < 0.f) thr = 0.f;
-              std::string cur = id(sel_currency).state;
-              const char* op = (dir >= 0) ? "≥" : "≤";
-              char b[48]; snprintf(b, sizeof(b), "%s %s %.2f", op, cur.c_str(), thr);
-              lv_label_set_text(id(alert_threshold_lbl), b);
-            };
-            switch (id(current_coin)) {
-              case 0: apply(id(alert_price_btc), id(last_fiat_btc), id(alert_dir_btc)); break;
-              case 1: apply(id(alert_price_eth), id(last_fiat_eth), id(alert_dir_eth)); break;
-              case 2: apply(id(alert_price_sol), id(last_fiat_sol), id(alert_dir_sol)); break;
-              case 3: apply(id(alert_price_ada), id(last_fiat_ada), id(alert_dir_ada)); break;
-              case 4: apply(id(alert_price_bnb), id(last_fiat_bnb), id(alert_dir_bnb)); break;
-            }
-
-  - platform: lvgl
-    id: bs_alert_plus
-    widget: btn_alert_plus
-    on_click:
-      then:
-        - lambda: |-
-            auto step_for = [](float p)->float{
-              float a = fabsf(p);
-              if (a > 5000.f) return 100.f;
-              if (a > 1000.f) return 10.f;
-              if (a > 100.f)  return 1.f;
-              if (a > 10.f)   return 0.1f;
-              return 0.01f;
-            };
-            auto apply=[&](float &thr, float last, int dir){
-              float st = step_for(last > 0 ? last : 100.f);
-              thr += st;
-              std::string cur = id(sel_currency).state;
-              const char* op = (dir >= 0) ? "≥" : "≤";
-              char b[48]; snprintf(b, sizeof(b), "%s %s %.2f", op, cur.c_str(), thr);
-              lv_label_set_text(id(alert_threshold_lbl), b);
-            };
-            switch (id(current_coin)) {
-              case 0: apply(id(alert_price_btc), id(last_fiat_btc), id(alert_dir_btc)); break;
-              case 1: apply(id(alert_price_eth), id(last_fiat_eth), id(alert_dir_eth)); break;
-              case 2: apply(id(alert_price_sol), id(last_fiat_sol), id(alert_dir_sol)); break;
-              case 3: apply(id(alert_price_ada), id(last_fiat_ada), id(alert_dir_ada)); break;
-              case 4: apply(id(alert_price_bnb), id(last_fiat_bnb), id(alert_dir_bnb)); break;
-            }
-
-  # ---- Settings: Currency left/right (drives HA select) ----
-  - platform: lvgl
-    id: bs_cur_left
-    widget: btn_cur_left
-    on_click:
-      then:
-        - lambda: |-
-            id(prev_usd_rate) = id(usd2dkk);
-            id(pending_fx_conv) = true;
-        - select.set:
-            id: sel_currency
-            option: !lambda |-
-              static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
-              const int N = 6;
-              std::string cur = id(sel_currency).state;
-              int idx = 0;
-              for (int i=0;i<N;i++){ if (cur == CURS[i]) { idx = i; break; } }
-              idx = (idx - 1 + N) % N;
-              return std::string(CURS[idx]);
-
-  - platform: lvgl
-    id: bs_cur_right
-    widget: btn_cur_right
-    on_click:
-      then:
-        - lambda: |-
-            id(prev_usd_rate) = id(usd2dkk);
-            id(pending_fx_conv) = true;
-        - select.set:
-            id: sel_currency
-            option: !lambda |-
-              static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
-              const int N = 6;
-              std::string cur = id(sel_currency).state;
-              int idx = 0;
-              for (int i=0;i<N;i++){ if (cur == CURS[i]) { idx = i; break; } }
-              idx = (idx + 1) % N;
-              return std::string(CURS[idx]);
 
 # Manual refresh button in HA
 button:
@@ -1174,6 +939,191 @@ select:
           };
           lv_label_set_text(id(bnb_name), pretty(x).c_str());
       - script.execute: fetch_prices
+
+# NEW: Alert controls in Home Assistant (threshold number + toggles)
+number:
+  - platform: template
+    name: "Alert Threshold Row 1"
+    id: num_alert_btc
+    min_value: 0
+    max_value: 1000000
+    step: 0.01
+    restore_value: yes
+    initial_value: 0
+    set_action:
+      - lambda: |-
+          id(alert_price_btc) = x;
+
+  - platform: template
+    name: "Alert Threshold Row 2"
+    id: num_alert_eth
+    min_value: 0
+    max_value: 1000000
+    step: 0.01
+    restore_value: yes
+    initial_value: 0
+    set_action:
+      - lambda: |-
+          id(alert_price_eth) = x;
+
+  - platform: template
+    name: "Alert Threshold Row 3"
+    id: num_alert_sol
+    min_value: 0
+    max_value: 1000000
+    step: 0.01
+    restore_value: yes
+    initial_value: 0
+    set_action:
+      - lambda: |-
+          id(alert_price_sol) = x;
+
+  - platform: template
+    name: "Alert Threshold Row 4"
+    id: num_alert_ada
+    min_value: 0
+    max_value: 1000000
+    step: 0.01
+    restore_value: yes
+    initial_value: 0
+    set_action:
+      - lambda: |-
+          id(alert_price_ada) = x;
+
+  - platform: template
+    name: "Alert Threshold Row 5"
+    id: num_alert_bnb
+    min_value: 0
+    max_value: 1000000
+    step: 0.01
+    restore_value: yes
+    initial_value: 0
+    set_action:
+      - lambda: |-
+          id(alert_price_bnb) = x;
+
+switch:
+  # Enabled toggles
+  - platform: template
+    name: "Alert Enabled Row 1"
+    id: sw_alert_enabled_btc
+    lambda: |-
+      return id(alert_enabled_btc);
+    turn_on_action:
+      - lambda: |-
+          id(alert_enabled_btc) = true;
+    turn_off_action:
+      - lambda: |-
+          id(alert_enabled_btc) = false;
+
+  - platform: template
+    name: "Alert Enabled Row 2"
+    id: sw_alert_enabled_eth
+    lambda: |-
+      return id(alert_enabled_eth);
+    turn_on_action:
+      - lambda: |-
+          id(alert_enabled_eth) = true;
+    turn_off_action:
+      - lambda: |-
+          id(alert_enabled_eth) = false;
+
+  - platform: template
+    name: "Alert Enabled Row 3"
+    id: sw_alert_enabled_sol
+    lambda: |-
+      return id(alert_enabled_sol);
+    turn_on_action:
+      - lambda: |-
+          id(alert_enabled_sol) = true;
+    turn_off_action:
+      - lambda: |-
+          id(alert_enabled_sol) = false;
+
+  - platform: template
+    name: "Alert Enabled Row 4"
+    id: sw_alert_enabled_ada
+    lambda: |-
+      return id(alert_enabled_ada);
+    turn_on_action:
+      - lambda: |-
+          id(alert_enabled_ada) = true;
+    turn_off_action:
+      - lambda: |-
+          id(alert_enabled_ada) = false;
+
+  - platform: template
+    name: "Alert Enabled Row 5"
+    id: sw_alert_enabled_bnb
+    lambda: |-
+      return id(alert_enabled_bnb);
+    turn_on_action:
+      - lambda: |-
+          id(alert_enabled_bnb) = true;
+    turn_off_action:
+      - lambda: |-
+          id(alert_enabled_bnb) = false;
+
+  # Direction toggles (ON = Above (≥), OFF = Below (≤))
+  - platform: template
+    name: "Alert Above Row 1 (off = Below)"
+    id: sw_alert_dir_btc
+    lambda: |-
+      return id(alert_dir_btc) >= 0;
+    turn_on_action:
+      - lambda: |-
+          id(alert_dir_btc) = 1;
+    turn_off_action:
+      - lambda: |-
+          id(alert_dir_btc) = -1;
+
+  - platform: template
+    name: "Alert Above Row 2 (off = Below)"
+    id: sw_alert_dir_eth
+    lambda: |-
+      return id(alert_dir_eth) >= 0;
+    turn_on_action:
+      - lambda: |-
+          id(alert_dir_eth) = 1;
+    turn_off_action:
+      - lambda: |-
+          id(alert_dir_eth) = -1;
+
+  - platform: template
+    name: "Alert Above Row 3 (off = Below)"
+    id: sw_alert_dir_sol
+    lambda: |-
+      return id(alert_dir_sol) >= 0;
+    turn_on_action:
+      - lambda: |-
+          id(alert_dir_sol) = 1;
+    turn_off_action:
+      - lambda: |-
+          id(alert_dir_sol) = -1;
+
+  - platform: template
+    name: "Alert Above Row 4 (off = Below)"
+    id: sw_alert_dir_ada
+    lambda: |-
+      return id(alert_dir_ada) >= 0;
+    turn_on_action:
+      - lambda: |-
+          id(alert_dir_ada) = 1;
+    turn_off_action:
+      - lambda: |-
+          id(alert_dir_ada) = -1;
+
+  - platform: template
+    name: "Alert Above Row 5 (off = Below)"
+    id: sw_alert_dir_bnb
+    lambda: |-
+      return id(alert_dir_bnb) >= 0;
+    turn_on_action:
+      - lambda: |-
+          id(alert_dir_bnb) = 1;
+    turn_off_action:
+      - lambda: |-
+          id(alert_dir_bnb) = -1;
 
 # HTTP client
 http_request:
@@ -1377,20 +1327,12 @@ script:
                       id(alert_price_ada) *= k;
                       id(alert_price_bnb) *= k;
 
-                      // If coin page is active, refresh its threshold line
-                      int c = id(current_coin);
-                      int dir = 1; float thr = 0.f;
-                      switch (c) {
-                        case 0: dir = id(alert_dir_btc); thr = id(alert_price_btc); break;
-                        case 1: dir = id(alert_dir_eth); thr = id(alert_price_eth); break;
-                        case 2: dir = id(alert_dir_sol); thr = id(alert_price_sol); break;
-                        case 3: dir = id(alert_dir_ada); thr = id(alert_price_ada); break;
-                        case 4: dir = id(alert_dir_bnb); thr = id(alert_price_bnb); break;
-                      }
-                      const char* op = (dir >= 0) ? "≥" : "≤";
-                      char b[48]; snprintf(b, sizeof(b), "%s %s %.2f", op, cur.c_str(), thr);
-                      if (lv_obj_is_valid(id(alert_threshold_lbl))) lv_label_set_text(id(alert_threshold_lbl), b);
-                      if (lv_obj_is_valid(id(alert_dir_glyph)))     lv_label_set_text(id(alert_dir_glyph), op);
+                      // Sync HA number entities with the converted thresholds
+                      id(num_alert_btc).publish_state(id(alert_price_btc));
+                      id(num_alert_eth).publish_state(id(alert_price_eth));
+                      id(num_alert_sol).publish_state(id(alert_price_sol));
+                      id(num_alert_ada).publish_state(id(alert_price_ada));
+                      id(num_alert_bnb).publish_state(id(alert_price_bnb));
                     }
                     id(pending_fx_conv) = false;
                   }
@@ -1457,8 +1399,6 @@ script:
                     }
                     id(btc_line).publish_state(out);
 
-                    #ifdef __cplusplus
-                    #endif
                     // Alerts (price-based)
                     {
                       float thr   = id(alert_price_btc);
