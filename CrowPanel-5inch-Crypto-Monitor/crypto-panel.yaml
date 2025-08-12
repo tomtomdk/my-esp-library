@@ -121,15 +121,13 @@ lvgl:
             else                  lv_obj_clear_state(id(sw_colorize), LV_STATE_CHECKED);
           }
 
-          // Reflect saved currency on Settings label and Prices title
+          // Reflect saved currency on Settings label and Prices title (from select)
           {
-            static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
-            int idx = id(cur_idx);
-            if (idx < 0 || idx > 5) idx = 0;
-            const char* cur = CURS[idx];
-            if (lv_obj_is_valid(id(lbl_currency))) lv_label_set_text(id(lbl_currency), cur);
+            std::string cur = id(sel_currency).state;
+            if (cur.empty()) cur = "DKK";
+            if (lv_obj_is_valid(id(lbl_currency))) lv_label_set_text(id(lbl_currency), cur.c_str());
             if (lv_obj_is_valid(id(title))) {
-              char ttl[32]; snprintf(ttl, sizeof(ttl), "Crypto (%s)", cur);
+              char ttl[32]; snprintf(ttl, sizeof(ttl), "Crypto (%s)", cur.c_str());
               lv_label_set_text(id(title), ttl);
             }
           }
@@ -688,36 +686,38 @@ binary_sensor:
               case 4: apply(id(alert_threshold_bnb)); break;
             }
 
-  # ---- Settings: Currency left/right ----
+  # ---- Settings: Currency left/right (now drives HA select) ----
   - platform: lvgl
     id: bs_cur_left
     widget: btn_cur_left
     on_click:
       then:
-        - lambda: |-
-            static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
-            const int N = 6;
-            id(cur_idx) = (id(cur_idx) - 1 + N) % N;
-            const char* cur = CURS[id(cur_idx)];
-            lv_label_set_text(id(lbl_currency), cur);
-            char ttl[32]; snprintf(ttl, sizeof(ttl), "Crypto (%s)", cur);
-            lv_label_set_text(id(title), ttl);
-        - script.execute: fetch_prices
+        - select.set:
+            id: sel_currency
+            option: !lambda |-
+              static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
+              const int N = 6;
+              std::string cur = id(sel_currency).state;
+              int idx = 0;
+              for (int i=0;i<N;i++){ if (cur == CURS[i]) { idx = i; break; } }
+              idx = (idx - 1 + N) % N;
+              return std::string(CURS[idx]);
 
   - platform: lvgl
     id: bs_cur_right
     widget: btn_cur_right
     on_click:
       then:
-        - lambda: |-
-            static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
-            const int N = 6;
-            id(cur_idx) = (id(cur_idx) + 1) % N;
-            const char* cur = CURS[id(cur_idx)];
-            lv_label_set_text(id(lbl_currency), cur);
-            char ttl[32]; snprintf(ttl, sizeof(ttl), "Crypto (%s)", cur);
-            lv_label_set_text(id(title), ttl);
-        - script.execute: fetch_prices
+        - select.set:
+            id: sel_currency
+            option: !lambda |-
+              static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
+              const int N = 6;
+              std::string cur = id(sel_currency).state;
+              int idx = 0;
+              for (int i=0;i<N;i++){ if (cur == CURS[i]) { idx = i; break; } }
+              idx = (idx + 1) % N;
+              return std::string(CURS[idx]);
 
 # Manual refresh button in HA
 button:
@@ -726,6 +726,24 @@ button:
     id: refresh_now
     on_press:
       - lvgl.label.update: { id: status, text: "Fetching (manual)..." }
+      - script.execute: fetch_prices
+
+# ===== New: Fiat currency selector (HA dropdown) =====
+select:
+  - platform: template
+    name: "Fiat Currency"
+    id: sel_currency
+    optimistic: true
+    options: ["DKK","EUR","USD","SEK","NOK","GBP"]
+    initial_option: "DKK"
+    on_value:
+      - lambda: |-
+          // Update Settings label and Prices title
+          if (lv_obj_is_valid(id(lbl_currency))) lv_label_set_text(id(lbl_currency), x.c_str());
+          if (lv_obj_is_valid(id(title))) {
+            char ttl[32]; snprintf(ttl, sizeof(ttl), "Crypto (%s)", x.c_str());
+            lv_label_set_text(id(title), ttl);
+          }
       - script.execute: fetch_prices
 
 # HTTP client
@@ -817,12 +835,6 @@ globals:
     restore_value: no
     initial_value: 'false'
 
-  # Currency selection index
-  - id: cur_idx
-    type: int
-    restore_value: yes
-    initial_value: '0'   # 0=DKK, 1=EUR, 2=USD, 3=SEK, 4=NOK, 5=GBP
-
 # ====================== Data Fetch ======================
 script:
   # 1) Get USD->[selected currency] via Frankfurter
@@ -832,13 +844,11 @@ script:
       - lvgl.label.update: { id: status, text: "FX..." }
       - http_request.get:
           url: !lambda |-
-            static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
-            int idx = id(cur_idx);
-            if (idx < 0 || idx > 5) idx = 0;
-            char buf[96];
+            std::string cur = id(sel_currency).state;  // "DKK"
+            char buf[128];
             snprintf(buf, sizeof(buf),
                      "https://api.frankfurter.app/latest?from=USD&to=%s",
-                     CURS[idx]);
+                     cur.c_str());
             return std::string(buf);
           request_headers: { Accept: application/json }
           capture_response: true
@@ -847,41 +857,36 @@ script:
               - lambda: |-
                   ESP_LOGD("crypto", "FX body: %s", body.c_str());
                   bool ok = false;
-                  static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
-                  int idx = id(cur_idx);
-                  if (idx < 0 || idx > 5) idx = 0;
-                  const char* cur = CURS[idx];
+                  std::string cur = id(sel_currency).state;
 
                   StaticJsonDocument<512> doc;
                   DeserializationError e = deserializeJson(doc, body);
-                  if (!e && doc["rates"][cur]) {
-                    id(usd2dkk) = doc["rates"][cur].as<float>();  // USD->[cur]
+                  if (!e && doc["rates"][cur.c_str()]) {
+                    id(usd2dkk) = doc["rates"][cur.c_str()].as<float>();  // USD->[cur]
                     ok = true;
                   }
 
                   // Update Info tab + title
                   if (ok) {
                     char fx[64];
-                    snprintf(fx, sizeof(fx), "USD->%s: %.4f", cur, id(usd2dkk));
+                    snprintf(fx, sizeof(fx), "USD->%s: %.4f", cur.c_str(), id(usd2dkk));
                     id(info_fx_line).publish_state(fx);
                   } else {
                     id(info_fx_line).publish_state("USD->?: —");
                   }
-                  char ttl[32]; snprintf(ttl, sizeof(ttl), "Crypto (%s)", cur);
+                  char ttl[32]; snprintf(ttl, sizeof(ttl), "Crypto (%s)", cur.c_str());
                   lv_label_set_text(id(title), ttl);
 
-                  ESP_LOGD("crypto", "USD->%s = %.4f", cur, id(usd2dkk));
+                  ESP_LOGD("crypto", "USD->%s = %.4f", cur.c_str(), id(usd2dkk));
                   id(status_line).publish_state(ok ? "FX OK" : "FX parse error");
               - script.execute: fetch_coins
           on_error:
             then:
               - lambda: |-
                   id(status_line).publish_state("FX HTTP error (using cached FX)");
-                  static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
-                  int idx = id(cur_idx);
-                  if (idx < 0 || idx > 5) idx = 0;
+                  std::string cur = id(sel_currency).state;
                   char fx[64];
-                  snprintf(fx, sizeof(fx), "USD->%s: %.4f", CURS[idx], id(usd2dkk));
+                  snprintf(fx, sizeof(fx), "USD->%s: %.4f", cur.c_str(), id(usd2dkk));
                   id(info_fx_line).publish_state(fx);
               - script.execute: fetch_coins
 
@@ -907,15 +912,14 @@ script:
                     double pct   = atof(pc);
                     double fiat  = price * id(usd2dkk);
 
-                    static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
-                    const char* cur = CURS[id(cur_idx)];
+                    std::string cur = id(sel_currency).state;
 
                     char out[96];
                     if (id(colorize_pct)) {
                       const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
-                      snprintf(out, sizeof(out), "%s %.2f  (%s %+.2f%%#)", cur, fiat, col, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%s %+.2f%%#)", cur.c_str(), fiat, col, pct);
                     } else {
-                      snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur, fiat, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur.c_str(), fiat, pct);
                     }
                     id(btc_line).publish_state(out);
 
@@ -989,15 +993,14 @@ script:
                     double pct   = atof(pc);
                     double fiat  = price * id(usd2dkk);
 
-                    static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
-                    const char* cur = CURS[id(cur_idx)];
+                    std::string cur = id(sel_currency).state;
 
                     char out[96];
                     if (id(colorize_pct)) {
                       const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
-                      snprintf(out, sizeof(out), "%s %.2f  (%s %+.2f%%#)", cur, fiat, col, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%s %+.2f%%#)", cur.c_str(), fiat, col, pct);
                     } else {
-                      snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur, fiat, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur.c_str(), fiat, pct);
                     }
                     id(eth_line).publish_state(out);
 
@@ -1069,15 +1072,14 @@ script:
                     double pct   = atof(pc);
                     double fiat  = price * id(usd2dkk);
 
-                    static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
-                    const char* cur = CURS[id(cur_idx)];
+                    std::string cur = id(sel_currency).state;
 
                     char out[96];
                     if (id(colorize_pct)) {
                       const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
-                      snprintf(out, sizeof(out), "%s %.2f  (%s %+.2f%%#)", cur, fiat, col, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%s %+.2f%%#)", cur.c_str(), fiat, col, pct);
                     } else {
-                      snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur, fiat, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur.c_str(), fiat, pct);
                     }
                     id(sol_line).publish_state(out);
 
@@ -1149,15 +1151,14 @@ script:
                     double pct   = atof(pc);
                     double fiat  = price * id(usd2dkk);
 
-                    static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
-                    const char* cur = CURS[id(cur_idx)];
+                    std::string cur = id(sel_currency).state;
 
                     char out[96];
                     if (id(colorize_pct)) {
                       const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
-                      snprintf(out, sizeof(out), "%s %.2f  (%s %+.2f%%#)", cur, fiat, col, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%s %+.2f%%#)", cur.c_str(), fiat, col, pct);
                     } else {
-                      snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur, fiat, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur.c_str(), fiat, pct);
                     }
                     id(ada_line).publish_state(out);
 
@@ -1229,15 +1230,14 @@ script:
                     double pct   = atof(pc);
                     double fiat  = price * id(usd2dkk);
 
-                    static const char* CURS[] = {"DKK","EUR","USD","SEK","NOK","GBP"};
-                    const char* cur = CURS[id(cur_idx)];
+                    std::string cur = id(sel_currency).state;
 
                     char out[96];
                     if (id(colorize_pct)) {
                       const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
-                      snprintf(out, sizeof(out), "%s %.2f  (%s %+.2f%%#)", cur, fiat, col, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%s %+.2f%%#)", cur.c_str(), fiat, col, pct);
                     } else {
-                      snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur, fiat, pct);
+                      snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur.c_str(), fiat, pct);
                     }
                     id(bnb_line).publish_state(out);
 
