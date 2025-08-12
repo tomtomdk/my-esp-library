@@ -26,7 +26,7 @@ captive_portal:
 time:
   - platform: sntp
     id: ntp
-    timezone: Europe/Stockholm # <<<<----------- Change this to yours ofcourse
+    timezone: Europe/Stockholm
     on_time_sync:
       then:
         - logger.log: "Time synced -> fetching…"
@@ -97,7 +97,6 @@ lvgl:
   color_depth: 16
   touchscreens: [touch]
 
-  # Brief transparent overlay to avoid the initial scroll; auto-hides.
   on_boot:
     then:
       - lvgl.widget.show: boot_blocker
@@ -121,16 +120,46 @@ lvgl:
             else                  lv_obj_clear_state(id(sw_colorize), LV_STATE_CHECKED);
           }
 
-          // Reflect saved currency on Settings label and Prices title (from select)
+          auto pretty = [](const std::string& s)->std::string{
+            if (s=="BTC") return "Bitcoin (BTC)";
+            if (s=="ETH") return "Ethereum (ETH)";
+            if (s=="SOL") return "Solana (SOL)";
+            if (s=="ADA") return "Cardano (ADA)";
+            if (s=="BNB") return "BNB (BNB)";
+            if (s=="XRP") return "XRP (XRP)";
+            if (s=="DOGE") return "Dogecoin (DOGE)";
+            if (s=="AVAX") return "Avalanche (AVAX)";
+            if (s=="DOT") return "Polkadot (DOT)";
+            if (s=="LINK") return "Chainlink (LINK)";
+            if (s=="MATIC") return "Polygon (MATIC)";
+            if (s=="POL") return "Polygon (POL)";
+            if (s=="TON") return "Toncoin (TON)";
+            if (s=="TRX") return "TRON (TRX)";
+            if (s=="NEAR") return "NEAR (NEAR)";
+            if (s=="ATOM") return "Cosmos (ATOM)";
+            if (s=="APT") return "Aptos (APT)";
+            if (s=="OP") return "Optimism (OP)";
+            if (s=="ARB") return "Arbitrum (ARB)";
+            if (s=="SUI") return "Sui (SUI)";
+            return s + " (" + s + ")";
+          };
+
+          // Reflect currency select on Settings label and Prices title
           {
-            std::string cur = id(sel_currency).state;
-            if (cur.empty()) cur = "DKK";
+            std::string cur = id(sel_currency).state; if (cur.empty()) cur = "DKK";
             if (lv_obj_is_valid(id(lbl_currency))) lv_label_set_text(id(lbl_currency), cur.c_str());
             if (lv_obj_is_valid(id(title))) {
               char ttl[32]; snprintf(ttl, sizeof(ttl), "Crypto (%s)", cur.c_str());
               lv_label_set_text(id(title), ttl);
             }
           }
+
+          // Set row names from coin selects
+          lv_label_set_text(id(btc_name), pretty(id(sel_row1).state).c_str());
+          lv_label_set_text(id(eth_name), pretty(id(sel_row2).state).c_str());
+          lv_label_set_text(id(sol_name), pretty(id(sel_row3).state).c_str());
+          lv_label_set_text(id(ada_name), pretty(id(sel_row4).state).c_str());
+          lv_label_set_text(id(bnb_name), pretty(id(sel_row5).state).c_str());
       - lvgl.widget.hide: boot_blocker
 
   widgets:
@@ -169,21 +198,21 @@ lvgl:
                     text_color: 0xFFFFFF
                     text_font: "montserrat_30"
 
-                # Left column: names
+                # Left column: names (now driven by selects)
                 - label: { id: btc_name, x: 20,  y: 60,  text: "Bitcoin (BTC)",  text_color: 0xA3B8D1, text_font: "montserrat_22" }
                 - label: { id: eth_name, x: 20,  y: 120, text: "Ethereum (ETH)", text_color: 0xA3B8D1, text_font: "montserrat_22" }
                 - label: { id: sol_name, x: 20,  y: 180, text: "Solana (SOL)",   text_color: 0xA3B8D1, text_font: "montserrat_22" }
                 - label: { id: ada_name, x: 20,  y: 240, text: "Cardano (ADA)",  text_color: 0xA3B8D1, text_font: "montserrat_22" }
                 - label: { id: bnb_name, x: 20,  y: 300, text: "BNB (BNB)",      text_color: 0xA3B8D1, text_font: "montserrat_22" }
 
-                # Right column: values (recolor enabled)
+                # Right column: values
                 - label: { id: btc_val, x: 330, y: 60,  text: "-", text_color: 0xE2E8F0, text_font: "montserrat_28", recolor: true }
                 - label: { id: eth_val, x: 330, y: 120, text: "-", text_color: 0xE2E8F0, text_font: "montserrat_28", recolor: true }
                 - label: { id: sol_val, x: 330, y: 180, text: "-", text_color: 0xE2E8F0, text_font: "montserrat_28", recolor: true }
                 - label: { id: ada_val, x: 330, y: 240, text: "-", text_color: 0xE2E8F0, text_font: "montserrat_28", recolor: true }
                 - label: { id: bnb_val, x: 330, y: 300, text: "-", text_color: 0xE2E8F0, text_font: "montserrat_28", recolor: true }
 
-                # Tap areas for each row (open detail)
+                # Tap areas
                 - button: { id: btn_row_btc, x: 0, y:  48, width: 800, height: 48, radius: 0, bg_opa: "0%" }
                 - button: { id: btn_row_eth, x: 0, y: 108, width: 800, height: 48, radius: 0, bg_opa: "0%" }
                 - button: { id: btn_row_sol, x: 0, y: 168, width: 800, height: 48, radius: 0, bg_opa: "0%" }
@@ -199,6 +228,26 @@ lvgl:
                     text: "Booting…"
                     text_color: 0x94A3B8
                     text_font: "montserrat_20"
+
+                # --- Alert bar (hidden by default; flashes when an alert trips) ---
+                - obj:
+                    id: alert_bar
+                    x: 20
+                    y: 356
+                    width: 760
+                    height: 44
+                    radius: 6
+                    bg_color: 0x7C2D12
+                    bg_opa: "100%"
+                    hidden: true
+                    scrollable: false
+                    widgets:
+                      - label:
+                          id: alert_text
+                          align: "CENTER"
+                          text: ""
+                          text_color: 0xFFFFFF
+                          text_font: "montserrat_22"
 
           # ---------- Page: Info ----------
           - obj:
@@ -325,12 +374,13 @@ lvgl:
                           points:
                             - "0, 176"
                             - "1, 175"
-                          line_width: 6   # optional if supported
+                          line_width: 6
                           line_color: 0x60A5FA
                           line_rounded: true
 
-                # Alerts controls
-                - label: { x: 20,  y: 330, text: "Alert when |%| ≥", text_color: 0xA3B8D1, text_font: "montserrat_20" }
+                # Alerts controls (price-based)
+                - label: { x: 20,  y: 330, text: "Alert when PRICE", text_color: 0xA3B8D1, text_font: "montserrat_20" }
+
                 - button:
                     id: btn_alert_minus
                     x: 230
@@ -339,27 +389,29 @@ lvgl:
                     height: 40
                     radius: 6
                     widgets: [ { label: { align: "CENTER", text: "-", text_font: "montserrat_24" } } ]
-                - label: { id: alert_threshold_lbl, x: 280, y: 328, text: "5.0%", text_color: 0xE2E8F0, text_font: "montserrat_22" }
+
+                - label: { id: alert_threshold_lbl, x: 280, y: 328, text: "≥ DKK 0.00", text_color: 0xE2E8F0, text_font: "montserrat_22" }
+
                 - button:
                     id: btn_alert_plus
-                    x: 360
+                    x: 460
                     y: 322
                     width: 40
                     height: 40
                     radius: 6
                     widgets: [ { label: { align: "CENTER", text: "+", text_font: "montserrat_24" } } ]
-                - label: { x: 430, y: 330, text: "Enabled", text_color: 0xA3B8D1, text_font: "montserrat_20" }
-                - switch: { id: sw_alert_enabled, x: 520, y: 326, width: 80, height: 32 }
 
-                # Back
                 - button:
-                    id: btn_back_prices
-                    x: 680
-                    y: 10
-                    width: 100
+                    id: btn_alert_dir
+                    x: 520
+                    y: 322
+                    width: 68
                     height: 40
                     radius: 6
-                    widgets: [ { label: { align: "CENTER", text: "Back", text_font: "montserrat_20" } } ]
+                    widgets: [ { label: { align: "CENTER", id: alert_dir_glyph, text: "≥", text_font: "montserrat_22" } } ]
+
+                - label: { x: 600, y: 330, text: "Enabled", text_color: 0xA3B8D1, text_font: "montserrat_20" }
+                - switch: { id: sw_alert_enabled, x: 690, y: 326, width: 80, height: 32 }
 
           # ---------- Bottom Nav Bar ----------
           - obj:
@@ -406,7 +458,7 @@ lvgl:
                     widgets:
                       - label: { align: "CENTER", text: "Settings", text_font: "montserrat_22" }
 
-          # ---------- Transparent boot overlay (auto-hides) ----------
+          # ---------- Transparent boot overlay ----------
           - button:
               id: boot_blocker
               x: 0
@@ -551,11 +603,43 @@ binary_sensor:
       then:
         - lambda: |-
             id(current_coin) = 0;
-            lv_label_set_text(id(coin_title), "Bitcoin (BTC)");
+            auto pretty = [](const std::string& s)->std::string{
+              if (s=="BTC") return "Bitcoin (BTC)";
+              if (s=="ETH") return "Ethereum (ETH)";
+              if (s=="SOL") return "Solana (SOL)";
+              if (s=="ADA") return "Cardano (ADA)";
+              if (s=="BNB") return "BNB (BNB)";
+              if (s=="XRP") return "XRP (XRP)";
+              if (s=="DOGE") return "Dogecoin (DOGE)";
+              if (s=="AVAX") return "Avalanche (AVAX)";
+              if (s=="DOT") return "Polkadot (DOT)";
+              if (s=="LINK") return "Chainlink (LINK)";
+              if (s=="MATIC") return "Polygon (MATIC)";
+              if (s=="POL") return "Polygon (POL)";
+              if (s=="TON") return "Toncoin (TON)";
+              if (s=="TRX") return "TRON (TRX)";
+              if (s=="NEAR") return "NEAR (NEAR)";
+              if (s=="ATOM") return "Cosmos (ATOM)";
+              if (s=="APT") return "Aptos (APT)";
+              if (s=="OP") return "Optimism (OP)";
+              if (s=="ARB") return "Arbitrum (ARB)";
+              if (s=="SUI") return "Sui (SUI)";
+              return s + " (" + s + ")";
+            };
+            lv_label_set_text(id(coin_title), pretty(id(sel_row1).state).c_str());
             lv_label_set_text(id(coin_price_line), lv_label_get_text(id(btc_val)));
             if (id(alert_enabled_btc)) lv_obj_add_state(id(sw_alert_enabled), LV_STATE_CHECKED);
             else lv_obj_clear_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            { char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", id(alert_threshold_btc)); lv_label_set_text(id(alert_threshold_lbl), buf); }
+            {
+              std::string cur = id(sel_currency).state;
+              int dir = id(alert_dir_btc);
+              float thr = id(alert_price_btc);
+              const char* op = (dir >= 0) ? "≥" : "≤";
+              char buf[48];
+              snprintf(buf, sizeof(buf), "%s %s %.2f", op, cur.c_str(), thr);
+              lv_label_set_text(id(alert_threshold_lbl), buf);
+              lv_label_set_text(id(alert_dir_glyph), op);
+            }
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
         - script.execute: fetch_prices
@@ -567,11 +651,43 @@ binary_sensor:
       then:
         - lambda: |-
             id(current_coin) = 1;
-            lv_label_set_text(id(coin_title), "Ethereum (ETH)");
+            auto pretty = [](const std::string& s)->std::string{
+              if (s=="BTC") return "Bitcoin (BTC)";
+              if (s=="ETH") return "Ethereum (ETH)";
+              if (s=="SOL") return "Solana (SOL)";
+              if (s=="ADA") return "Cardano (ADA)";
+              if (s=="BNB") return "BNB (BNB)";
+              if (s=="XRP") return "XRP (XRP)";
+              if (s=="DOGE") return "Dogecoin (DOGE)";
+              if (s=="AVAX") return "Avalanche (AVAX)";
+              if (s=="DOT") return "Polkadot (DOT)";
+              if (s=="LINK") return "Chainlink (LINK)";
+              if (s=="MATIC") return "Polygon (MATIC)";
+              if (s=="POL") return "Polygon (POL)";
+              if (s=="TON") return "Toncoin (TON)";
+              if (s=="TRX") return "TRON (TRX)";
+              if (s=="NEAR") return "NEAR (NEAR)";
+              if (s=="ATOM") return "Cosmos (ATOM)";
+              if (s=="APT") return "Aptos (APT)";
+              if (s=="OP") return "Optimism (OP)";
+              if (s=="ARB") return "Arbitrum (ARB)";
+              if (s=="SUI") return "Sui (SUI)";
+              return s + " (" + s + ")";
+            };
+            lv_label_set_text(id(coin_title), pretty(id(sel_row2).state).c_str());
             lv_label_set_text(id(coin_price_line), lv_label_get_text(id(eth_val)));
             if (id(alert_enabled_eth)) lv_obj_add_state(id(sw_alert_enabled), LV_STATE_CHECKED);
             else lv_obj_clear_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            { char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", id(alert_threshold_eth)); lv_label_set_text(id(alert_threshold_lbl), buf); }
+            {
+              std::string cur = id(sel_currency).state;
+              int dir = id(alert_dir_eth);
+              float thr = id(alert_price_eth);
+              const char* op = (dir >= 0) ? "≥" : "≤";
+              char buf[48];
+              snprintf(buf, sizeof(buf), "%s %s %.2f", op, cur.c_str(), thr);
+              lv_label_set_text(id(alert_threshold_lbl), buf);
+              lv_label_set_text(id(alert_dir_glyph), op);
+            }
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
         - script.execute: fetch_prices
@@ -583,11 +699,43 @@ binary_sensor:
       then:
         - lambda: |-
             id(current_coin) = 2;
-            lv_label_set_text(id(coin_title), "Solana (SOL)");
+            auto pretty = [](const std::string& s)->std::string{
+              if (s=="SOL") return "Solana (SOL)";
+              if (s=="BTC") return "Bitcoin (BTC)";
+              if (s=="ETH") return "Ethereum (ETH)";
+              if (s=="ADA") return "Cardano (ADA)";
+              if (s=="BNB") return "BNB (BNB)";
+              if (s=="XRP") return "XRP (XRP)";
+              if (s=="DOGE") return "Dogecoin (DOGE)";
+              if (s=="AVAX") return "Avalanche (AVAX)";
+              if (s=="DOT") return "Polkadot (DOT)";
+              if (s=="LINK") return "Chainlink (LINK)";
+              if (s=="MATIC") return "Polygon (MATIC)";
+              if (s=="POL") return "Polygon (POL)";
+              if (s=="TON") return "Toncoin (TON)";
+              if (s=="TRX") return "TRON (TRX)";
+              if (s=="NEAR") return "NEAR (NEAR)";
+              if (s=="ATOM") return "Cosmos (ATOM)";
+              if (s=="APT") return "Aptos (APT)";
+              if (s=="OP") return "Optimism (OP)";
+              if (s=="ARB") return "Arbitrum (ARB)";
+              if (s=="SUI") return "Sui (SUI)";
+              return s + " (" + s + ")";
+            };
+            lv_label_set_text(id(coin_title), pretty(id(sel_row3).state).c_str());
             lv_label_set_text(id(coin_price_line), lv_label_get_text(id(sol_val)));
             if (id(alert_enabled_sol)) lv_obj_add_state(id(sw_alert_enabled), LV_STATE_CHECKED);
             else lv_obj_clear_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            { char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", id(alert_threshold_sol)); lv_label_set_text(id(alert_threshold_lbl), buf); }
+            {
+              std::string cur = id(sel_currency).state;
+              int dir = id(alert_dir_sol);
+              float thr = id(alert_price_sol);
+              const char* op = (dir >= 0) ? "≥" : "≤";
+              char buf[48];
+              snprintf(buf, sizeof(buf), "%s %s %.2f", op, cur.c_str(), thr);
+              lv_label_set_text(id(alert_threshold_lbl), buf);
+              lv_label_set_text(id(alert_dir_glyph), op);
+            }
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
         - script.execute: fetch_prices
@@ -599,11 +747,43 @@ binary_sensor:
       then:
         - lambda: |-
             id(current_coin) = 3;
-            lv_label_set_text(id(coin_title), "Cardano (ADA)");
+            auto pretty = [](const std::string& s)->std::string{
+              if (s=="ADA") return "Cardano (ADA)";
+              if (s=="BTC") return "Bitcoin (BTC)";
+              if (s=="ETH") return "Ethereum (ETH)";
+              if (s=="SOL") return "Solana (SOL)";
+              if (s=="BNB") return "BNB (BNB)";
+              if (s=="XRP") return "XRP (XRP)";
+              if (s=="DOGE") return "Dogecoin (DOGE)";
+              if (s=="AVAX") return "Avalanche (AVAX)";
+              if (s=="DOT") return "Polkadot (DOT)";
+              if (s=="LINK") return "Chainlink (LINK)";
+              if (s=="MATIC") return "Polygon (MATIC)";
+              if (s=="POL") return "Polygon (POL)";
+              if (s=="TON") return "Toncoin (TON)";
+              if (s=="TRX") return "TRON (TRX)";
+              if (s=="NEAR") return "NEAR (NEAR)";
+              if (s=="ATOM") return "Cosmos (ATOM)";
+              if (s=="APT") return "Aptos (APT)";
+              if (s=="OP") return "Optimism (OP)";
+              if (s=="ARB") return "Arbitrum (ARB)";
+              if (s=="SUI") return "Sui (SUI)";
+              return s + " (" + s + ")";
+            };
+            lv_label_set_text(id(coin_title), pretty(id(sel_row4).state).c_str());
             lv_label_set_text(id(coin_price_line), lv_label_get_text(id(ada_val)));
             if (id(alert_enabled_ada)) lv_obj_add_state(id(sw_alert_enabled), LV_STATE_CHECKED);
             else lv_obj_clear_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            { char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", id(alert_threshold_ada)); lv_label_set_text(id(alert_threshold_lbl), buf); }
+            {
+              std::string cur = id(sel_currency).state;
+              int dir = id(alert_dir_ada);
+              float thr = id(alert_price_ada);
+              const char* op = (dir >= 0) ? "≥" : "≤";
+              char buf[48];
+              snprintf(buf, sizeof(buf), "%s %s %.2f", op, cur.c_str(), thr);
+              lv_label_set_text(id(alert_threshold_lbl), buf);
+              lv_label_set_text(id(alert_dir_glyph), op);
+            }
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
         - script.execute: fetch_prices
@@ -615,24 +795,48 @@ binary_sensor:
       then:
         - lambda: |-
             id(current_coin) = 4;
-            lv_label_set_text(id(coin_title), "BNB (BNB)");
+            auto pretty = [](const std::string& s)->std::string{
+              if (s=="BNB") return "BNB (BNB)";
+              if (s=="BTC") return "Bitcoin (BTC)";
+              if (s=="ETH") return "Ethereum (ETH)";
+              if (s=="SOL") return "Solana (SOL)";
+              if (s=="ADA") return "Cardano (ADA)";
+              if (s=="XRP") return "XRP (XRP)";
+              if (s=="DOGE") return "Dogecoin (DOGE)";
+              if (s=="AVAX") return "Avalanche (AVAX)";
+              if (s=="DOT") return "Polkadot (DOT)";
+              if (s=="LINK") return "Chainlink (LINK)";
+              if (s=="MATIC") return "Polygon (MATIC)";
+              if (s=="POL") return "Polygon (POL)";
+              if (s=="TON") return "Toncoin (TON)";
+              if (s=="TRX") return "TRON (TRX)";
+              if (s=="NEAR") return "NEAR (NEAR)";
+              if (s=="ATOM") return "Cosmos (ATOM)";
+              if (s=="APT") return "Aptos (APT)";
+              if (s=="OP") return "Optimism (OP)";
+              if (s=="ARB") return "Arbitrum (ARB)";
+              if (s=="SUI") return "Sui (SUI)";
+              return s + " (" + s + ")";
+            };
+            lv_label_set_text(id(coin_title), pretty(id(sel_row5).state).c_str());
             lv_label_set_text(id(coin_price_line), lv_label_get_text(id(bnb_val)));
             if (id(alert_enabled_bnb)) lv_obj_add_state(id(sw_alert_enabled), LV_STATE_CHECKED);
             else lv_obj_clear_state(id(sw_alert_enabled), LV_STATE_CHECKED);
-            { char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", id(alert_threshold_bnb)); lv_label_set_text(id(alert_threshold_lbl), buf); }
+            {
+              std::string cur = id(sel_currency).state;
+              int dir = id(alert_dir_bnb);
+              float thr = id(alert_price_bnb);
+              const char* op = (dir >= 0) ? "≥" : "≤";
+              char buf[48];
+              snprintf(buf, sizeof(buf), "%s %s %.2f", op, cur.c_str(), thr);
+              lv_label_set_text(id(alert_threshold_lbl), buf);
+              lv_label_set_text(id(alert_dir_glyph), op);
+            }
         - lvgl.widget.hide: page_prices
         - lvgl.widget.show: page_coin
         - script.execute: fetch_prices
 
-  # ---- Coin detail: back + controls ----
-  - platform: lvgl
-    id: bs_back_prices
-    widget: btn_back_prices
-    on_click:
-      then:
-        - lvgl.widget.show: page_prices
-        - lvgl.widget.hide: page_coin
-
+  # ---- Coin detail: Alert enable switch ----
   - platform: lvgl
     id: bs_sw_alert_enabled
     widget: sw_alert_enabled
@@ -648,23 +852,59 @@ binary_sensor:
               case 4: id(alert_enabled_bnb) = on; break;
             }
 
+  # ---- Alerts: direction toggle ≥ / ≤ ----
+  - platform: lvgl
+    id: bs_alert_dir
+    widget: btn_alert_dir
+    on_click:
+      then:
+        - lambda: |-
+            auto apply=[&](int &dir, float thr){
+              dir = (dir >= 0) ? -1 : 1;
+              const char* op = (dir >= 0) ? "≥" : "≤";
+              lv_label_set_text(id(alert_dir_glyph), op);
+              std::string cur = id(sel_currency).state;
+              char b[48];
+              snprintf(b, sizeof(b), "%s %s %.2f", op, cur.c_str(), thr);
+              lv_label_set_text(id(alert_threshold_lbl), b);
+            };
+            switch (id(current_coin)) {
+              case 0: apply(id(alert_dir_btc), id(alert_price_btc)); break;
+              case 1: apply(id(alert_dir_eth), id(alert_price_eth)); break;
+              case 2: apply(id(alert_dir_sol), id(alert_price_sol)); break;
+              case 3: apply(id(alert_dir_ada), id(alert_price_ada)); break;
+              case 4: apply(id(alert_dir_bnb), id(alert_price_bnb)); break;
+            }
+
+  # ---- Alerts: adjust threshold price with +/- ----
   - platform: lvgl
     id: bs_alert_minus
     widget: btn_alert_minus
     on_click:
       then:
         - lambda: |-
-            auto apply=[&](float &thr){
-              thr -= 0.5f; if (thr < 0.5f) thr = 0.5f;
-              char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", thr);
-              lv_label_set_text(id(alert_threshold_lbl), buf);
+            auto step_for = [](float p)->float{
+              float a = fabsf(p);
+              if (a > 5000.f) return 100.f;
+              if (a > 1000.f) return 10.f;
+              if (a > 100.f)  return 1.f;
+              if (a > 10.f)   return 0.1f;
+              return 0.01f;
+            };
+            auto apply=[&](float &thr, float last, int dir){
+              float st = step_for(last > 0 ? last : 100.f);
+              thr -= st; if (thr < 0.f) thr = 0.f;
+              std::string cur = id(sel_currency).state;
+              const char* op = (dir >= 0) ? "≥" : "≤";
+              char b[48]; snprintf(b, sizeof(b), "%s %s %.2f", op, cur.c_str(), thr);
+              lv_label_set_text(id(alert_threshold_lbl), b);
             };
             switch (id(current_coin)) {
-              case 0: apply(id(alert_threshold_btc)); break;
-              case 1: apply(id(alert_threshold_eth)); break;
-              case 2: apply(id(alert_threshold_sol)); break;
-              case 3: apply(id(alert_threshold_ada)); break;
-              case 4: apply(id(alert_threshold_bnb)); break;
+              case 0: apply(id(alert_price_btc), id(last_fiat_btc), id(alert_dir_btc)); break;
+              case 1: apply(id(alert_price_eth), id(last_fiat_eth), id(alert_dir_eth)); break;
+              case 2: apply(id(alert_price_sol), id(last_fiat_sol), id(alert_dir_sol)); break;
+              case 3: apply(id(alert_price_ada), id(last_fiat_ada), id(alert_dir_ada)); break;
+              case 4: apply(id(alert_price_bnb), id(last_fiat_bnb), id(alert_dir_bnb)); break;
             }
 
   - platform: lvgl
@@ -673,25 +913,39 @@ binary_sensor:
     on_click:
       then:
         - lambda: |-
-            auto apply=[&](float &thr){
-              thr += 0.5f; if (thr > 50.0f) thr = 50.0f;
-              char buf[16]; snprintf(buf, sizeof(buf), "%.1f%%", thr);
-              lv_label_set_text(id(alert_threshold_lbl), buf);
+            auto step_for = [](float p)->float{
+              float a = fabsf(p);
+              if (a > 5000.f) return 100.f;
+              if (a > 1000.f) return 10.f;
+              if (a > 100.f)  return 1.f;
+              if (a > 10.f)   return 0.1f;
+              return 0.01f;
+            };
+            auto apply=[&](float &thr, float last, int dir){
+              float st = step_for(last > 0 ? last : 100.f);
+              thr += st;
+              std::string cur = id(sel_currency).state;
+              const char* op = (dir >= 0) ? "≥" : "≤";
+              char b[48]; snprintf(b, sizeof(b), "%s %s %.2f", op, cur.c_str(), thr);
+              lv_label_set_text(id(alert_threshold_lbl), b);
             };
             switch (id(current_coin)) {
-              case 0: apply(id(alert_threshold_btc)); break;
-              case 1: apply(id(alert_threshold_eth)); break;
-              case 2: apply(id(alert_threshold_sol)); break;
-              case 3: apply(id(alert_threshold_ada)); break;
-              case 4: apply(id(alert_threshold_bnb)); break;
+              case 0: apply(id(alert_price_btc), id(last_fiat_btc), id(alert_dir_btc)); break;
+              case 1: apply(id(alert_price_eth), id(last_fiat_eth), id(alert_dir_eth)); break;
+              case 2: apply(id(alert_price_sol), id(last_fiat_sol), id(alert_dir_sol)); break;
+              case 3: apply(id(alert_price_ada), id(last_fiat_ada), id(alert_dir_ada)); break;
+              case 4: apply(id(alert_price_bnb), id(last_fiat_bnb), id(alert_dir_bnb)); break;
             }
 
-  # ---- Settings: Currency left/right (now drives HA select) ----
+  # ---- Settings: Currency left/right (drives HA select) ----
   - platform: lvgl
     id: bs_cur_left
     widget: btn_cur_left
     on_click:
       then:
+        - lambda: |-
+            id(prev_usd_rate) = id(usd2dkk);
+            id(pending_fx_conv) = true;
         - select.set:
             id: sel_currency
             option: !lambda |-
@@ -708,6 +962,9 @@ binary_sensor:
     widget: btn_cur_right
     on_click:
       then:
+        - lambda: |-
+            id(prev_usd_rate) = id(usd2dkk);
+            id(pending_fx_conv) = true;
         - select.set:
             id: sel_currency
             option: !lambda |-
@@ -728,7 +985,7 @@ button:
       - lvgl.label.update: { id: status, text: "Fetching (manual)..." }
       - script.execute: fetch_prices
 
-# ===== New: Fiat currency selector (HA dropdown) =====
+# ===== Fiat + Coin selectors (Home Assistant) =====
 select:
   - platform: template
     name: "Fiat Currency"
@@ -738,12 +995,184 @@ select:
     initial_option: "DKK"
     on_value:
       - lambda: |-
-          // Update Settings label and Prices title
+          id(prev_usd_rate) = id(usd2dkk);
+          id(pending_fx_conv) = true;
+      - lambda: |-
           if (lv_obj_is_valid(id(lbl_currency))) lv_label_set_text(id(lbl_currency), x.c_str());
           if (lv_obj_is_valid(id(title))) {
             char ttl[32]; snprintf(ttl, sizeof(ttl), "Crypto (%s)", x.c_str());
             lv_label_set_text(id(title), ttl);
           }
+      - script.execute: fetch_prices
+
+  - platform: template
+    name: "Row 1 Coin"
+    id: sel_row1
+    optimistic: true
+    options: ["BTC","ETH","SOL","ADA","BNB","XRP","DOGE","AVAX","DOT","LINK","MATIC","POL","TON","TRX","NEAR","ATOM","APT","OP","ARB","SUI"]
+    initial_option: "BTC"
+    on_value:
+      - lambda: |-
+          auto pretty = [](const std::string& s)->std::string{
+            if (s=="BTC") return "Bitcoin (BTC)";
+            if (s=="ETH") return "Ethereum (ETH)";
+            if (s=="SOL") return "Solana (SOL)";
+            if (s=="ADA") return "Cardano (ADA)";
+            if (s=="BNB") return "BNB (BNB)";
+            if (s=="XRP") return "XRP (XRP)";
+            if (s=="DOGE") return "Dogecoin (DOGE)";
+            if (s=="AVAX") return "Avalanche (AVAX)";
+            if (s=="DOT") return "Polkadot (DOT)";
+            if (s=="LINK") return "Chainlink (LINK)";
+            if (s=="MATIC") return "Polygon (MATIC)";
+            if (s=="POL") return "Polygon (POL)";
+            if (s=="TON") return "Toncoin (TON)";
+            if (s=="TRX") return "TRON (TRX)";
+            if (s=="NEAR") return "NEAR (NEAR)";
+            if (s=="ATOM") return "Cosmos (ATOM)";
+            if (s=="APT") return "Aptos (APT)";
+            if (s=="OP") return "Optimism (OP)";
+            if (s=="ARB") return "Arbitrum (ARB)";
+            if (s=="SUI") return "Sui (SUI)";
+            return s + " (" + s + ")";
+          };
+          lv_label_set_text(id(btc_name), pretty(x).c_str());
+      - script.execute: fetch_prices
+
+  - platform: template
+    name: "Row 2 Coin"
+    id: sel_row2
+    optimistic: true
+    options: ["BTC","ETH","SOL","ADA","BNB","XRP","DOGE","AVAX","DOT","LINK","MATIC","POL","TON","TRX","NEAR","ATOM","APT","OP","ARB","SUI"]
+    initial_option: "ETH"
+    on_value:
+      - lambda: |-
+          auto pretty = [](const std::string& s)->std::string{
+            if (s=="BTC") return "Bitcoin (BTC)";
+            if (s=="ETH") return "Ethereum (ETH)";
+            if (s=="SOL") return "Solana (SOL)";
+            if (s=="ADA") return "Cardano (ADA)";
+            if (s=="BNB") return "BNB (BNB)";
+            if (s=="XRP") return "XRP (XRP)";
+            if (s=="DOGE") return "Dogecoin (DOGE)";
+            if (s=="AVAX") return "Avalanche (AVAX)";
+            if (s=="DOT") return "Polkadot (DOT)";
+            if (s=="LINK") return "Chainlink (LINK)";
+            if (s=="MATIC") return "Polygon (MATIC)";
+            if (s=="POL") return "Polygon (POL)";
+            if (s=="TON") return "Toncoin (TON)";
+            if (s=="TRX") return "TRON (TRX)";
+            if (s=="NEAR") return "NEAR (NEAR)";
+            if (s=="ATOM") return "Cosmos (ATOM)";
+            if (s=="APT") return "Aptos (APT)";
+            if (s=="OP") return "Optimism (OP)";
+            if (s=="ARB") return "Arbitrum (ARB)";
+            if (s=="SUI") return "Sui (SUI)";
+            return s + " (" + s + ")";
+          };
+          lv_label_set_text(id(eth_name), pretty(x).c_str());
+      - script.execute: fetch_prices
+
+  - platform: template
+    name: "Row 3 Coin"
+    id: sel_row3
+    optimistic: true
+    options: ["BTC","ETH","SOL","ADA","BNB","XRP","DOGE","AVAX","DOT","LINK","MATIC","POL","TON","TRX","NEAR","ATOM","APT","OP","ARB","SUI"]
+    initial_option: "SOL"
+    on_value:
+      - lambda: |-
+          auto pretty = [](const std::string& s)->std::string{
+            if (s=="BTC") return "Bitcoin (BTC)";
+            if (s=="ETH") return "Ethereum (ETH)";
+            if (s=="SOL") return "Solana (SOL)";
+            if (s=="ADA") return "Cardano (ADA)";
+            if (s=="BNB") return "BNB (BNB)";
+            if (s=="XRP") return "XRP (XRP)";
+            if (s=="DOGE") return "Dogecoin (DOGE)";
+            if (s=="AVAX") return "Avalanche (AVAX)";
+            if (s=="DOT") return "Polkadot (DOT)";
+            if (s=="LINK") return "Chainlink (LINK)";
+            if (s=="MATIC") return "Polygon (MATIC)";
+            if (s=="POL") return "Polygon (POL)";
+            if (s=="TON") return "Toncoin (TON)";
+            if (s=="TRX") return "TRON (TRX)";
+            if (s=="NEAR") return "NEAR (NEAR)";
+            if (s=="ATOM") return "Cosmos (ATOM)";
+            if (s=="APT") return "Aptos (APT)";
+            if (s=="OP") return "Optimism (OP)";
+            if (s=="ARB") return "Arbitrum (ARB)";
+            if (s=="SUI") return "Sui (SUI)";
+            return s + " (" + s + ")";
+          };
+          lv_label_set_text(id(sol_name), pretty(x).c_str());
+      - script.execute: fetch_prices
+
+  - platform: template
+    name: "Row 4 Coin"
+    id: sel_row4
+    optimistic: true
+    options: ["BTC","ETH","SOL","ADA","BNB","XRP","DOGE","AVAX","DOT","LINK","MATIC","POL","TON","TRX","NEAR","ATOM","APT","OP","ARB","SUI"]
+    initial_option: "ADA"
+    on_value:
+      - lambda: |-
+          auto pretty = [](const std::string& s)->std::string{
+            if (s=="BTC") return "Bitcoin (BTC)";
+            if (s=="ETH") return "Ethereum (ETH)";
+            if (s=="SOL") return "Solana (SOL)";
+            if (s=="ADA") return "Cardano (ADA)";
+            if (s=="BNB") return "BNB (BNB)";
+            if (s=="XRP") return "XRP (XRP)";
+            if (s=="DOGE") return "Dogecoin (DOGE)";
+            if (s=="AVAX") return "Avalanche (AVAX)";
+            if (s=="DOT") return "Polkadot (DOT)";
+            if (s=="LINK") return "Chainlink (LINK)";
+            if (s=="MATIC") return "Polygon (MATIC)";
+            if (s=="POL") return "Polygon (POL)";
+            if (s=="TON") return "Toncoin (TON)";
+            if (s=="TRX") return "TRON (TRX)";
+            if (s=="NEAR") return "NEAR (NEAR)";
+            if (s=="ATOM") return "Cosmos (ATOM)";
+            if (s=="APT") return "Aptos (APT)";
+            if (s=="OP") return "Optimism (OP)";
+            if (s=="ARB") return "Arbitrum (ARB)";
+            if (s=="SUI") return "Sui (SUI)";
+            return s + " (" + s + ")";
+          };
+          lv_label_set_text(id(ada_name), pretty(x).c_str());
+      - script.execute: fetch_prices
+
+  - platform: template
+    name: "Row 5 Coin"
+    id: sel_row5
+    optimistic: true
+    options: ["BTC","ETH","SOL","ADA","BNB","XRP","DOGE","AVAX","DOT","LINK","MATIC","POL","TON","TRX","NEAR","ATOM","APT","OP","ARB","SUI"]
+    initial_option: "BNB"
+    on_value:
+      - lambda: |-
+          auto pretty = [](const std::string& s)->std::string{
+            if (s=="BTC") return "Bitcoin (BTC)";
+            if (s=="ETH") return "Ethereum (ETH)";
+            if (s=="SOL") return "Solana (SOL)";
+            if (s=="ADA") return "Cardano (ADA)";
+            if (s=="BNB") return "BNB (BNB)";
+            if (s=="XRP") return "XRP (XRP)";
+            if (s=="DOGE") return "Dogecoin (DOGE)";
+            if (s=="AVAX") return "Avalanche (AVAX)";
+            if (s=="DOT") return "Polkadot (DOT)";
+            if (s=="LINK") return "Chainlink (LINK)";
+            if (s=="MATIC") return "Polygon (MATIC)";
+            if (s=="POL") return "Polygon (POL)";
+            if (s=="TON") return "Toncoin (TON)";
+            if (s=="TRX") return "TRON (TRX)";
+            if (s=="NEAR") return "NEAR (NEAR)";
+            if (s=="ATOM") return "Cosmos (ATOM)";
+            if (s=="APT") return "Aptos (APT)";
+            if (s=="OP") return "Optimism (OP)";
+            if (s=="ARB") return "Arbitrum (ARB)";
+            if (s=="SUI") return "Sui (SUI)";
+            return s + " (" + s + ")";
+          };
+          lv_label_set_text(id(bnb_name), pretty(x).c_str());
       - script.execute: fetch_prices
 
 # HTTP client
@@ -763,21 +1192,17 @@ globals:
     restore_value: yes
     initial_value: 'true'
 
-  # Which coin is shown on detail page: 0=BTC,1=ETH,2=SOL,3=ADA,4=BNB
+  # Which coin is shown on detail page: 0..4 for rows 1..5
   - id: current_coin
     type: int
     restore_value: no
     initial_value: '0'
 
-  # Per-coin alert enable + threshold + fired guard
+  # Per-row alert enabled + fired
   - id: alert_enabled_btc
     type: bool
     restore_value: yes
     initial_value: 'false'
-  - id: alert_threshold_btc
-    type: float
-    restore_value: yes
-    initial_value: '5.0'
   - id: alert_fired_btc
     type: bool
     restore_value: no
@@ -787,10 +1212,6 @@ globals:
     type: bool
     restore_value: yes
     initial_value: 'false'
-  - id: alert_threshold_eth
-    type: float
-    restore_value: yes
-    initial_value: '5.0'
   - id: alert_fired_eth
     type: bool
     restore_value: no
@@ -800,10 +1221,6 @@ globals:
     type: bool
     restore_value: yes
     initial_value: 'false'
-  - id: alert_threshold_sol
-    type: float
-    restore_value: yes
-    initial_value: '5.0'
   - id: alert_fired_sol
     type: bool
     restore_value: no
@@ -813,10 +1230,6 @@ globals:
     type: bool
     restore_value: yes
     initial_value: 'false'
-  - id: alert_threshold_ada
-    type: float
-    restore_value: yes
-    initial_value: '5.0'
   - id: alert_fired_ada
     type: bool
     restore_value: no
@@ -826,17 +1239,102 @@ globals:
     type: bool
     restore_value: yes
     initial_value: 'false'
-  - id: alert_threshold_bnb
+  - id: alert_fired_bnb
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  # -------- Price-based alert thresholds (in selected fiat) + direction (+1 ≥, -1 ≤)
+  - id: alert_price_btc
     type: float
     restore_value: yes
-    initial_value: '5.0'
-  - id: alert_fired_bnb
+    initial_value: '0.0'
+  - id: alert_dir_btc
+    type: int
+    restore_value: yes
+    initial_value: '1'
+
+  - id: alert_price_eth
+    type: float
+    restore_value: yes
+    initial_value: '0.0'
+  - id: alert_dir_eth
+    type: int
+    restore_value: yes
+    initial_value: '1'
+
+  - id: alert_price_sol
+    type: float
+    restore_value: yes
+    initial_value: '0.0'
+  - id: alert_dir_sol
+    type: int
+    restore_value: yes
+    initial_value: '1'
+
+  - id: alert_price_ada
+    type: float
+    restore_value: yes
+    initial_value: '0.0'
+  - id: alert_dir_ada
+    type: int
+    restore_value: yes
+    initial_value: '1'
+
+  - id: alert_price_bnb
+    type: float
+    restore_value: yes
+    initial_value: '0.0'
+  - id: alert_dir_bnb
+    type: int
+    restore_value: yes
+    initial_value: '1'
+
+  # Track last converted fiat price for step sizing
+  - id: last_fiat_btc
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+  - id: last_fiat_eth
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+  - id: last_fiat_sol
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+  - id: last_fiat_ada
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+  - id: last_fiat_bnb
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+
+  - id: prev_usd_rate
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+  - id: pending_fx_conv
     type: bool
     restore_value: no
     initial_value: 'false'
 
 # ====================== Data Fetch ======================
 script:
+  # Flash the alert bar a few times
+  - id: alert_flash
+    then:
+      - lvgl.widget.show: alert_bar
+      - repeat:
+          count: 6
+          then:
+            - lvgl.widget.hide: alert_bar
+            - delay: 200ms
+            - lvgl.widget.show: alert_bar
+            - delay: 200ms
+
   # 1) Get USD->[selected currency] via Frankfurter
   - id: fetch_prices
     mode: queued
@@ -844,7 +1342,7 @@ script:
       - lvgl.label.update: { id: status, text: "FX..." }
       - http_request.get:
           url: !lambda |-
-            std::string cur = id(sel_currency).state;  // "DKK"
+            std::string cur = id(sel_currency).state;
             char buf[128];
             snprintf(buf, sizeof(buf),
                      "https://api.frankfurter.app/latest?from=USD&to=%s",
@@ -866,7 +1364,37 @@ script:
                     ok = true;
                   }
 
-                  // Update Info tab + title
+                  // --- Auto-convert saved thresholds if fiat changed successfully ---
+                  if (ok && id(pending_fx_conv)) {
+                    float oldr = id(prev_usd_rate);
+                    float newr = id(usd2dkk);
+                    if (oldr > 0.0f && fabsf(newr - oldr) > 1e-6f) {
+                      float k = newr / oldr;
+
+                      id(alert_price_btc) *= k;
+                      id(alert_price_eth) *= k;
+                      id(alert_price_sol) *= k;
+                      id(alert_price_ada) *= k;
+                      id(alert_price_bnb) *= k;
+
+                      // If coin page is active, refresh its threshold line
+                      int c = id(current_coin);
+                      int dir = 1; float thr = 0.f;
+                      switch (c) {
+                        case 0: dir = id(alert_dir_btc); thr = id(alert_price_btc); break;
+                        case 1: dir = id(alert_dir_eth); thr = id(alert_price_eth); break;
+                        case 2: dir = id(alert_dir_sol); thr = id(alert_price_sol); break;
+                        case 3: dir = id(alert_dir_ada); thr = id(alert_price_ada); break;
+                        case 4: dir = id(alert_dir_bnb); thr = id(alert_price_bnb); break;
+                      }
+                      const char* op = (dir >= 0) ? "≥" : "≤";
+                      char b[48]; snprintf(b, sizeof(b), "%s %s %.2f", op, cur.c_str(), thr);
+                      if (lv_obj_is_valid(id(alert_threshold_lbl))) lv_label_set_text(id(alert_threshold_lbl), b);
+                      if (lv_obj_is_valid(id(alert_dir_glyph)))     lv_label_set_text(id(alert_dir_glyph), op);
+                    }
+                    id(pending_fx_conv) = false;
+                  }
+
                   if (ok) {
                     char fx[64];
                     snprintf(fx, sizeof(fx), "USD->%s: %.4f", cur.c_str(), id(usd2dkk));
@@ -890,14 +1418,17 @@ script:
                   id(info_fx_line).publish_state(fx);
               - script.execute: fetch_coins
 
-  # 2) Per-coin requests from Binance + colorize + alerts + LVGL line chart
+  # 2) Per-row requests from Binance + colorize + alerts + LVGL line chart
   - id: fetch_coins
     then:
       - lvgl.label.update: { id: status, text: "Prices..." }
 
-      # BTC
+      # Row 1
       - http_request.get:
-          url: https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT
+          url: !lambda |-
+            std::string sym = id(sel_row1).state;
+            std::string pair = sym + "USDT";
+            return "https://api.binance.com/api/v3/ticker/24hr?symbol=" + pair;
           request_headers: { Accept: application/json }
           capture_response: true
           on_response:
@@ -914,6 +1445,9 @@ script:
 
                     std::string cur = id(sel_currency).state;
 
+                    // Save last fiat for step sizing
+                    id(last_fiat_btc) = fiat;
+
                     char out[96];
                     if (id(colorize_pct)) {
                       const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
@@ -923,42 +1457,53 @@ script:
                     }
                     id(btc_line).publish_state(out);
 
-                    // Alerts
+                    #ifdef __cplusplus
+                    #endif
+                    // Alerts (price-based)
                     {
-                      float thr = id(alert_threshold_btc);
-                      bool en   = id(alert_enabled_btc);
+                      float thr   = id(alert_price_btc);
+                      int   dir   = id(alert_dir_btc);   // +1 => ≥, -1 => ≤
+                      bool  en    = id(alert_enabled_btc);
                       bool &fired = id(alert_fired_btc);
-                      if (en) {
-                        if (!fired && fabs(pct) >= thr) {
+                      if (en && thr > 0.0f) {
+                        bool hit = (dir >= 0) ? (fiat >= thr) : (fiat <= thr);
+                        if (!fired && hit) {
                           fired = true;
-                          char s[64]; snprintf(s, sizeof(s), "ALERT: BTC %+.2f%% (>= %.1f%%)", pct, thr);
+                          const char* op = (dir >= 0) ? "≥" : "≤";
+                          char s[96];
+                          snprintf(s, sizeof(s), "ALERT: %s %s %.2f (now %s %.2f)", id(sel_row1).state.c_str(), op, thr, cur.c_str(), fiat);
                           id(status_line).publish_state(s);
-                        } else if (fired && fabs(pct) < thr*0.8f) {
-                          fired = false;
+                          lv_label_set_text(id(alert_text), s);
+                          id(alert_flash).execute();
+                        } else if (fired) {
+                          // 0.5% hysteresis around threshold
+                          float up = thr * 1.005f;
+                          float dn = thr * 0.995f;
+                          if ( (dir >= 0 && fiat < dn) || (dir < 0 && fiat > up) ) fired = false;
                         }
                       } else {
                         fired = false;
                       }
                     }
 
-                    // ---- BTC line chart (40 samples) ----
-                    static float hist_btc[40]; static int len_btc=0, idx_btc=0;
+                    // ---- Row 1 line chart (40 samples) ----
+                    static float hist1[40]; static int len1=0, idx1=0;
                     {
                       const int cap = 40;
-                      if (len_btc < cap) hist_btc[len_btc++] = fiat;
-                      else { hist_btc[idx_btc] = fiat; idx_btc = (idx_btc + 1) % cap; }
+                      if (len1 < cap) hist1[len1++] = fiat;
+                      else { hist1[idx1] = fiat; idx1 = (idx1 + 1) % cap; }
 
                       if (id(current_coin) == 0) {
                         const int w = 736, h = 176;
-                        const int n = len_btc;
+                        const int n = len1;
                         if (n >= 2) {
-                          const int start = (n < cap) ? 0 : idx_btc;
-                          float mn = hist_btc[start], mx = mn;
-                          for (int k=1;k<n;k++){ float v=hist_btc[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
+                          const int start = (n < cap) ? 0 : idx1;
+                          float mn = hist1[start], mx = mn;
+                          for (int k=1;k<n;k++){ float v=hist1[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
                           if (mx - mn < 1e-6f) mx = mn + 1.0f;
                           static lv_point_t pts[40];
                           for (int k=0;k<n;k++){
-                            float v=hist_btc[(start+k)%cap];
+                            float v=hist1[(start+k)%cap];
                             float t=(v-mn)/(mx-mn);
                             int x=(int)((float)k*(w-1)/(n-1)+0.5f);
                             int y=(int)((1.0f-t)*(h-1)+0.5f);
@@ -970,15 +1515,18 @@ script:
                       }
                     }
                   } else {
-                    id(status_line).publish_state("BTC parse error");
+                    id(status_line).publish_state("Row1 parse error");
                   }
           on_error:
             then:
-              - lambda: id(status_line).publish_state("BTC HTTP error");
+              - lambda: id(status_line).publish_state("Row1 HTTP error");
 
-      # ETH
+      # Row 2
       - http_request.get:
-          url: https://api.binance.com/api/v3/ticker/24hr?symbol=ETHUSDT
+          url: !lambda |-
+            std::string sym = id(sel_row2).state;
+            std::string pair = sym + "USDT";
+            return "https://api.binance.com/api/v3/ticker/24hr?symbol=" + pair;
           request_headers: { Accept: application/json }
           capture_response: true
           on_response:
@@ -994,6 +1542,8 @@ script:
                     double fiat  = price * id(usd2dkk);
 
                     std::string cur = id(sel_currency).state;
+
+                    id(last_fiat_eth) = fiat;
 
                     char out[96];
                     if (id(colorize_pct)) {
@@ -1004,41 +1554,48 @@ script:
                     }
                     id(eth_line).publish_state(out);
 
-                    // Alerts
+                    // Alerts (price-based)
                     {
-                      float thr = id(alert_threshold_eth);
-                      bool en   = id(alert_enabled_eth);
+                      float thr   = id(alert_price_eth);
+                      int   dir   = id(alert_dir_eth);
+                      bool  en    = id(alert_enabled_eth);
                       bool &fired = id(alert_fired_eth);
-                      if (en) {
-                        if (!fired && fabs(pct) >= thr) {
+                      if (en && thr > 0.0f) {
+                        bool hit = (dir >= 0) ? (fiat >= thr) : (fiat <= thr);
+                        if (!fired && hit) {
                           fired = true;
-                          char s[64]; snprintf(s, sizeof(s), "ALERT: ETH %+.2f%% (>= %.1f%%)", pct, thr);
+                          const char* op = (dir >= 0) ? "≥" : "≤";
+                          char s[96];
+                          snprintf(s, sizeof(s), "ALERT: %s %s %.2f (now %s %.2f)", id(sel_row2).state.c_str(), op, thr, cur.c_str(), fiat);
                           id(status_line).publish_state(s);
-                        } else if (fired && fabs(pct) < thr*0.8f) {
-                          fired = false;
+                          lv_label_set_text(id(alert_text), s);
+                          id(alert_flash).execute();
+                        } else if (fired) {
+                          float up = thr * 1.005f;
+                          float dn = thr * 0.995f;
+                          if ( (dir >= 0 && fiat < dn) || (dir < 0 && fiat > up) ) fired = false;
                         }
                       } else {
                         fired = false;
                       }
                     }
 
-                    // ---- ETH line chart ----
-                    static float hist_eth[40]; static int len_eth=0, idx_eth=0;
+                    static float hist2[40]; static int len2=0, idx2=0;
                     {
                       const int cap=40;
-                      if (len_eth < cap) hist_eth[len_eth++] = fiat;
-                      else { hist_eth[idx_eth] = fiat; idx_eth = (idx_eth + 1) % cap; }
+                      if (len2 < cap) hist2[len2++] = fiat;
+                      else { hist2[idx2] = fiat; idx2 = (idx2 + 1) % cap; }
 
                       if (id(current_coin) == 1) {
-                        const int w=736, h=176, n=len_eth;
+                        const int w=736, h=176, n=len2;
                         if (n >= 2) {
-                          const int start=(n<cap)?0:idx_eth;
-                          float mn=hist_eth[start], mx=mn;
-                          for (int k=1;k<n;k++){ float v=hist_eth[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
+                          const int start=(n<cap)?0:idx2;
+                          float mn=hist2[start], mx=mn;
+                          for (int k=1;k<n;k++){ float v=hist2[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
                           if (mx-mn<1e-6f) mx = mn + 1.0f;
                           static lv_point_t pts[40];
                           for (int k=0;k<n;k++){
-                            float v=hist_eth[(start+k)%cap], t=(v-mn)/(mx-mn);
+                            float v=hist2[(start+k)%cap], t=(v-mn)/(mx-mn);
                             int x=(int)((float)k*(w-1)/(n-1)+0.5f);
                             int y=(int)((1.0f-t)*(h-1)+0.5f);
                             pts[k].x=x; pts[k].y=y;
@@ -1049,15 +1606,18 @@ script:
                       }
                     }
                   } else {
-                    id(status_line).publish_state("ETH parse error");
+                    id(status_line).publish_state("Row2 parse error");
                   }
           on_error:
             then:
-              - lambda: id(status_line).publish_state("ETH HTTP error");
+              - lambda: id(status_line).publish_state("Row2 HTTP error");
 
-      # SOL
+      # Row 3
       - http_request.get:
-          url: https://api.binance.com/api/v3/ticker/24hr?symbol=SOLUSDT
+          url: !lambda |-
+            std::string sym = id(sel_row3).state;
+            std::string pair = sym + "USDT";
+            return "https://api.binance.com/api/v3/ticker/24hr?symbol=" + pair;
           request_headers: { Accept: application/json }
           capture_response: true
           on_response:
@@ -1073,6 +1633,8 @@ script:
                     double fiat  = price * id(usd2dkk);
 
                     std::string cur = id(sel_currency).state;
+
+                    id(last_fiat_sol) = fiat;
 
                     char out[96];
                     if (id(colorize_pct)) {
@@ -1083,41 +1645,48 @@ script:
                     }
                     id(sol_line).publish_state(out);
 
-                    // Alerts
+                    // Alerts (price-based)
                     {
-                      float thr = id(alert_threshold_sol);
-                      bool en   = id(alert_enabled_sol);
+                      float thr   = id(alert_price_sol);
+                      int   dir   = id(alert_dir_sol);
+                      bool  en    = id(alert_enabled_sol);
                       bool &fired = id(alert_fired_sol);
-                      if (en) {
-                        if (!fired && fabs(pct) >= thr) {
+                      if (en && thr > 0.0f) {
+                        bool hit = (dir >= 0) ? (fiat >= thr) : (fiat <= thr);
+                        if (!fired && hit) {
                           fired = true;
-                          char s[64]; snprintf(s, sizeof(s), "ALERT: SOL %+.2f%% (>= %.1f%%)", pct, thr);
+                          const char* op = (dir >= 0) ? "≥" : "≤";
+                          char s[96];
+                          snprintf(s, sizeof(s), "ALERT: %s %s %.2f (now %s %.2f)", id(sel_row3).state.c_str(), op, thr, cur.c_str(), fiat);
                           id(status_line).publish_state(s);
-                        } else if (fired && fabs(pct) < thr*0.8f) {
-                          fired = false;
+                          lv_label_set_text(id(alert_text), s);
+                          id(alert_flash).execute();
+                        } else if (fired) {
+                          float up = thr * 1.005f;
+                          float dn = thr * 0.995f;
+                          if ( (dir >= 0 && fiat < dn) || (dir < 0 && fiat > up) ) fired = false;
                         }
                       } else {
                         fired = false;
                       }
                     }
 
-                    // ---- SOL line chart ----
-                    static float hist_sol[40]; static int len_sol=0, idx_sol=0;
+                    static float hist3[40]; static int len3=0, idx3=0;
                     {
                       const int cap=40;
-                      if (len_sol < cap) hist_sol[len_sol++] = fiat;
-                      else { hist_sol[idx_sol] = fiat; idx_sol = (idx_sol + 1) % cap; }
+                      if (len3 < cap) hist3[len3++] = fiat;
+                      else { hist3[idx3] = fiat; idx3 = (idx3 + 1) % cap; }
 
                       if (id(current_coin) == 2) {
-                        const int w=736, h=176, n=len_sol;
+                        const int w=736, h=176, n=len3;
                         if (n >= 2) {
-                          const int start=(n<cap)?0:idx_sol;
-                          float mn=hist_sol[start], mx=mn;
-                          for (int k=1;k<n;k++){ float v=hist_sol[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
+                          const int start=(n<cap)?0:idx3;
+                          float mn=hist3[start], mx=mn;
+                          for (int k=1;k<n;k++){ float v=hist3[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
                           if (mx-mn<1e-6f) mx = mn + 1.0f;
                           static lv_point_t pts[40];
                           for (int k=0;k<n;k++){
-                            float v=hist_sol[(start+k)%cap], t=(v-mn)/(mx-mn);
+                            float v=hist3[(start+k)%cap], t=(v-mn)/(mx-mn);
                             int x=(int)((float)k*(w-1)/(n-1)+0.5f);
                             int y=(int)((1.0f-t)*(h-1)+0.5f);
                             pts[k].x=x; pts[k].y=y;
@@ -1128,15 +1697,18 @@ script:
                       }
                     }
                   } else {
-                    id(status_line).publish_state("SOL parse error");
+                    id(status_line).publish_state("Row3 parse error");
                   }
           on_error:
             then:
-              - lambda: id(status_line).publish_state("SOL HTTP error");
+              - lambda: id(status_line).publish_state("Row3 HTTP error");
 
-      # ADA
+      # Row 4
       - http_request.get:
-          url: https://api.binance.com/api/v3/ticker/24hr?symbol=ADAUSDT
+          url: !lambda |-
+            std::string sym = id(sel_row4).state;
+            std::string pair = sym + "USDT";
+            return "https://api.binance.com/api/v3/ticker/24hr?symbol=" + pair;
           request_headers: { Accept: application/json }
           capture_response: true
           on_response:
@@ -1152,6 +1724,8 @@ script:
                     double fiat  = price * id(usd2dkk);
 
                     std::string cur = id(sel_currency).state;
+
+                    id(last_fiat_ada) = fiat;
 
                     char out[96];
                     if (id(colorize_pct)) {
@@ -1162,41 +1736,48 @@ script:
                     }
                     id(ada_line).publish_state(out);
 
-                    // Alerts
+                    // Alerts (price-based)
                     {
-                      float thr = id(alert_threshold_ada);
-                      bool en   = id(alert_enabled_ada);
+                      float thr   = id(alert_price_ada);
+                      int   dir   = id(alert_dir_ada);
+                      bool  en    = id(alert_enabled_ada);
                       bool &fired = id(alert_fired_ada);
-                      if (en) {
-                        if (!fired && fabs(pct) >= thr) {
+                      if (en && thr > 0.0f) {
+                        bool hit = (dir >= 0) ? (fiat >= thr) : (fiat <= thr);
+                        if (!fired && hit) {
                           fired = true;
-                          char s[64]; snprintf(s, sizeof(s), "ALERT: ADA %+.2f%% (>= %.1f%%)", pct, thr);
+                          const char* op = (dir >= 0) ? "≥" : "≤";
+                          char s[96];
+                          snprintf(s, sizeof(s), "ALERT: %s %s %.2f (now %s %.2f)", id(sel_row4).state.c_str(), op, thr, cur.c_str(), fiat);
                           id(status_line).publish_state(s);
-                        } else if (fired && fabs(pct) < thr*0.8f) {
-                          fired = false;
+                          lv_label_set_text(id(alert_text), s);
+                          id(alert_flash).execute();
+                        } else if (fired) {
+                          float up = thr * 1.005f;
+                          float dn = thr * 0.995f;
+                          if ( (dir >= 0 && fiat < dn) || (dir < 0 && fiat > up) ) fired = false;
                         }
                       } else {
                         fired = false;
                       }
                     }
 
-                    // ---- ADA line chart ----
-                    static float hist_ada[40]; static int len_ada=0, idx_ada=0;
+                    static float hist4[40]; static int len4=0, idx4=0;
                     {
                       const int cap=40;
-                      if (len_ada < cap) hist_ada[len_ada++] = fiat;
-                      else { hist_ada[idx_ada] = fiat; idx_ada = (idx_ada + 1) % cap; }
+                      if (len4 < cap) hist4[len4++] = fiat;
+                      else { hist4[idx4] = fiat; idx4 = (idx4 + 1) % cap; }
 
                       if (id(current_coin) == 3) {
-                        const int w=736, h=176, n=len_ada;
+                        const int w=736, h=176, n=len4;
                         if (n >= 2) {
-                          const int start=(n<cap)?0:idx_ada;
-                          float mn=hist_ada[start], mx=mn;
-                          for (int k=1;k<n;k++){ float v=hist_ada[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
+                          const int start=(n<cap)?0:idx4;
+                          float mn=hist4[start], mx=mn;
+                          for (int k=1;k<n;k++){ float v=hist4[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
                           if (mx-mn<1e-6f) mx = mn + 1.0f;
                           static lv_point_t pts[40];
                           for (int k=0;k<n;k++){
-                            float v=hist_ada[(start+k)%cap], t=(v-mn)/(mx-mn);
+                            float v=hist4[(start+k)%cap], t=(v-mn)/(mx-mn);
                             int x=(int)((float)k*(w-1)/(n-1)+0.5f);
                             int y=(int)((1.0f-t)*(h-1)+0.5f);
                             pts[k].x=x; pts[k].y=y;
@@ -1207,15 +1788,18 @@ script:
                       }
                     }
                   } else {
-                    id(status_line).publish_state("ADA parse error");
+                    id(status_line).publish_state("Row4 parse error");
                   }
           on_error:
             then:
-              - lambda: id(status_line).publish_state("ADA HTTP error");
+              - lambda: id(status_line).publish_state("Row4 HTTP error");
 
-      # BNB
+      # Row 5
       - http_request.get:
-          url: https://api.binance.com/api/v3/ticker/24hr?symbol=BNBUSDT
+          url: !lambda |-
+            std::string sym = id(sel_row5).state;
+            std::string pair = sym + "USDT";
+            return "https://api.binance.com/api/v3/ticker/24hr?symbol=" + pair;
           request_headers: { Accept: application/json }
           capture_response: true
           on_response:
@@ -1232,6 +1816,8 @@ script:
 
                     std::string cur = id(sel_currency).state;
 
+                    id(last_fiat_bnb) = fiat;
+
                     char out[96];
                     if (id(colorize_pct)) {
                       const char* col = (pct > 0.005) ? "#10B981" : (pct < -0.005) ? "#EF4444" : "#94A3B8";
@@ -1241,41 +1827,48 @@ script:
                     }
                     id(bnb_line).publish_state(out);
 
-                    // Alerts
+                    // Alerts (price-based)
                     {
-                      float thr = id(alert_threshold_bnb);
-                      bool en   = id(alert_enabled_bnb);
+                      float thr   = id(alert_price_bnb);
+                      int   dir   = id(alert_dir_bnb);
+                      bool  en    = id(alert_enabled_bnb);
                       bool &fired = id(alert_fired_bnb);
-                      if (en) {
-                        if (!fired && fabs(pct) >= thr) {
+                      if (en && thr > 0.0f) {
+                        bool hit = (dir >= 0) ? (fiat >= thr) : (fiat <= thr);
+                        if (!fired && hit) {
                           fired = true;
-                          char s[64]; snprintf(s, sizeof(s), "ALERT: BNB %+.2f%% (>= %.1f%%)", pct, thr);
+                          const char* op = (dir >= 0) ? "≥" : "≤";
+                          char s[96];
+                          snprintf(s, sizeof(s), "ALERT: %s %s %.2f (now %s %.2f)", id(sel_row5).state.c_str(), op, thr, cur.c_str(), fiat);
                           id(status_line).publish_state(s);
-                        } else if (fired && fabs(pct) < thr*0.8f) {
-                          fired = false;
+                          lv_label_set_text(id(alert_text), s);
+                          id(alert_flash).execute();
+                        } else if (fired) {
+                          float up = thr * 1.005f;
+                          float dn = thr * 0.995f;
+                          if ( (dir >= 0 && fiat < dn) || (dir < 0 && fiat > up) ) fired = false;
                         }
                       } else {
                         fired = false;
                       }
                     }
 
-                    // ---- BNB line chart ----
-                    static float hist_bnb[40]; static int len_bnb=0, idx_bnb=0;
+                    static float hist5[40]; static int len5=0, idx5=0;
                     {
                       const int cap=40;
-                      if (len_bnb < cap) hist_bnb[len_bnb++] = fiat;
-                      else { hist_bnb[idx_bnb] = fiat; idx_bnb = (idx_bnb + 1) % cap; }
+                      if (len5 < cap) hist5[len5++] = fiat;
+                      else { hist5[idx5] = fiat; idx5 = (idx5 + 1) % cap; }
 
                       if (id(current_coin) == 4) {
-                        const int w=736, h=176, n=len_bnb;
+                        const int w=736, h=176, n=len5;
                         if (n >= 2) {
-                          const int start=(n<cap)?0:idx_bnb;
-                          float mn=hist_bnb[start], mx=mn;
-                          for (int k=1;k<n;k++){ float v=hist_bnb[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
+                          const int start=(n<cap)?0:idx5;
+                          float mn=hist5[start], mx=mn;
+                          for (int k=1;k<n;k++){ float v=hist5[(start+k)%cap]; if(v<mn) mn=v; if(v>mx) mx=v; }
                           if (mx-mn<1e-6f) mx = mn + 1.0f;
                           static lv_point_t pts[40];
                           for (int k=0;k<n;k++){
-                            float v=hist_bnb[(start+k)%cap], t=(v-mn)/(mx-mn);
+                            float v=hist5[(start+k)%cap], t=(v-mn)/(mx-mn);
                             int x=(int)((float)k*(w-1)/(n-1)+0.5f);
                             int y=(int)((1.0f-t)*(h-1)+0.5f);
                             pts[k].x=x; pts[k].y=y;
@@ -1296,12 +1889,12 @@ script:
                       }
                     }
                   } else {
-                    id(status_line).publish_state("BNB parse error");
+                    id(status_line).publish_state("Row5 parse error");
                   }
           on_error:
             then:
               - lambda: |-
-                  id(status_line).publish_state("BNB HTTP error");
+                  id(status_line).publish_state("Row5 HTTP error");
                   auto now = id(ntp).now();
                   if (now.is_valid()) {
                     char t[48];
