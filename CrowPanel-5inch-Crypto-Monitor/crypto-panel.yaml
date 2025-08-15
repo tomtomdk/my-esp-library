@@ -30,6 +30,21 @@ esphome:
           id(sel_row4).publish_state(id(sel_row4).state);
           id(sel_row5).publish_state(id(sel_row5).state);
 
+          // make HA sensors available immediately
+          id(status_line).publish_state("Booting…");
+          id(info_last_line).publish_state("Last update: —");
+          id(info_fx_line).publish_state("USD->?: —");
+          id(info_wifi_line).publish_state("WiFi: —");
+          id(info_ip_line).publish_state("IP: —");
+          id(info_uptime_line).publish_state("Uptime: —");
+
+          // show dashes until first fetch
+          id(btc_line_ha).publish_state("-");
+          id(eth_line_ha).publish_state("-");
+          id(sol_line_ha).publish_state("-");
+          id(ada_line_ha).publish_state("-");
+          id(bnb_line_ha).publish_state("-");
+
 esp32:
   board: esp32-s3-devkitc-1
   framework:
@@ -473,46 +488,148 @@ lvgl:
 
 # Text sensors (drive value labels & status)
 text_sensor:
+  # LVGL-only, hidden from HA
   - platform: template
     id: btc_line
+    internal: true
     on_value: [lvgl.label.update: { id: btc_val, text: !lambda 'return x;' }]
+
   - platform: template
     id: eth_line
+    internal: true
     on_value: [lvgl.label.update: { id: eth_val, text: !lambda 'return x;' }]
+
   - platform: template
     id: sol_line
+    internal: true
     on_value: [lvgl.label.update: { id: sol_val, text: !lambda 'return x;' }]
+
   - platform: template
     id: ada_line
+    internal: true
     on_value: [lvgl.label.update: { id: ada_val, text: !lambda 'return x;' }]
+
   - platform: template
     id: bnb_line
+    internal: true
     on_value: [lvgl.label.update: { id: bnb_val, text: !lambda 'return x;' }]
+
+  # HA-visible copies for device Settings
   - platform: template
+    name: "Row 1 Value"
+    id: btc_line_ha
+    entity_category: diagnostic
+    icon: mdi:currency-usd
+    lambda: |-
+      std::string s = id(btc_line).state;
+      size_t paren = s.find("  (");              // two spaces + "(" before color/pct
+      std::string left = (paren != std::string::npos) ? s.substr(0, paren) : s;
+      // If you want ONLY the numeric part (no currency), uncomment the 2 lines below:
+      // size_t sp = left.find(' ');
+      // if (sp != std::string::npos) left = left.substr(sp + 1);
+      return { left };
+    update_interval: 5s
+
+# Row 2 (HA)
+  - platform: template
+    name: "Row 2 Value"
+    id: eth_line_ha
+    entity_category: diagnostic
+    icon: mdi:currency-usd
+    lambda: |-
+      std::string s = id(eth_line).state;
+      size_t paren = s.find("  (");
+      std::string left = (paren != std::string::npos) ? s.substr(0, paren) : s;
+      // size_t sp = left.find(' '); if (sp != std::string::npos) left = left.substr(sp + 1);
+      return { left };
+    update_interval: 5s
+
+# Row 3 (HA)
+  - platform: template
+    name: "Row 3 Value"
+    id: sol_line_ha
+    entity_category: diagnostic
+    icon: mdi:currency-usd
+    lambda: |-
+      std::string s = id(sol_line).state;
+      size_t paren = s.find("  (");
+      std::string left = (paren != std::string::npos) ? s.substr(0, paren) : s;
+      // size_t sp = left.find(' '); if (sp != std::string::npos) left = left.substr(sp + 1);
+      return { left };
+    update_interval: 5s
+
+# Row 4 (HA)
+  - platform: template
+    name: "Row 4 Value"
+    id: ada_line_ha
+    entity_category: diagnostic
+    icon: mdi:currency-usd
+    lambda: |-
+      std::string s = id(ada_line).state;
+      size_t paren = s.find("  (");
+      std::string left = (paren != std::string::npos) ? s.substr(0, paren) : s;
+      // size_t sp = left.find(' '); if (sp != std::string::npos) left = left.substr(sp + 1);
+      return { left };
+    update_interval: 5s
+
+# Row 5 (HA)
+  - platform: template
+    name: "Row 5 Value"
+    id: bnb_line_ha
+    entity_category: diagnostic
+    icon: mdi:currency-usd
+    lambda: |-
+      std::string s = id(bnb_line).state;
+      size_t paren = s.find("  (");
+      std::string left = (paren != std::string::npos) ? s.substr(0, paren) : s;
+      // size_t sp = left.find(' '); if (sp != std::string::npos) left = left.substr(sp + 1);
+      return { left };
+    update_interval: 5s
+
+  # Page Info (exposed and still drive LVGL)
+  - platform: template
+    name: "Status"
     id: status_line
+    entity_category: diagnostic
+    icon: mdi:information
     on_value: [lvgl.label.update: { id: status, text: !lambda 'return x;' }]
 
-  # Page Info
   - platform: template
+    name: "Last Update"
     id: info_last_line
+    entity_category: diagnostic
+    icon: mdi:clock-outline
     on_value: [lvgl.label.update: { id: info_last, text: !lambda 'return x;' }]
 
   - platform: template
+    name: "FX Rate"
     id: info_fx_line
+    entity_category: diagnostic
+    icon: mdi:cash-multiple
     on_value: [lvgl.label.update: { id: info_fx, text: !lambda 'return x;' }]
 
   - platform: template
+    name: "WiFi"
     id: info_wifi_line
+    entity_category: diagnostic
+    icon: mdi:wifi
     on_value: [lvgl.label.update: { id: info_wifi, text: !lambda 'return x;' }]
 
   - platform: template
+    name: "IP Address"
     id: info_ip_line
+    entity_category: diagnostic
+    icon: mdi:ip
     on_value: [lvgl.label.update: { id: info_ip, text: !lambda 'return x;' }]
 
   - platform: template
+    name: "Uptime"
     id: info_uptime_line
+    entity_category: diagnostic
+    icon: mdi:clock-outline
     on_value: [lvgl.label.update: { id: info_uptime, text: !lambda 'return x;' }]
 
+  # Keep wifi_info internal; it just feeds the visible IP text sensor above
   - platform: wifi_info
     ip_address:
       id: wifi_ip
@@ -1003,6 +1120,7 @@ number:
     step: 0.01
     restore_value: yes
     initial_value: 0
+    entity_category: config 
     set_action:
       - lambda: |-
           id(alert_price_btc) = x;
@@ -1015,6 +1133,7 @@ number:
     step: 0.01
     restore_value: yes
     initial_value: 0
+    entity_category: config 
     set_action:
       - lambda: |-
           id(alert_price_eth) = x;
@@ -1027,6 +1146,7 @@ number:
     step: 0.01
     restore_value: yes
     initial_value: 0
+    entity_category: config
     set_action:
       - lambda: |-
           id(alert_price_sol) = x;
@@ -1039,6 +1159,7 @@ number:
     step: 0.01
     restore_value: yes
     initial_value: 0
+    entity_category: config
     set_action:
       - lambda: |-
           id(alert_price_ada) = x;
@@ -1051,6 +1172,7 @@ number:
     step: 0.01
     restore_value: yes
     initial_value: 0
+    entity_category: config
     set_action:
       - lambda: |-
           id(alert_price_bnb) = x;
@@ -1060,6 +1182,7 @@ switch:
   - platform: template
     name: "Alert Enabled Row 1"
     id: sw_alert_enabled_btc
+    entity_category: config 
     lambda: |-
       return id(alert_enabled_btc);
     turn_on_action:
@@ -1072,6 +1195,7 @@ switch:
   - platform: template
     name: "Alert Enabled Row 2"
     id: sw_alert_enabled_eth
+    entity_category: config 
     lambda: |-
       return id(alert_enabled_eth);
     turn_on_action:
@@ -1084,6 +1208,7 @@ switch:
   - platform: template
     name: "Alert Enabled Row 3"
     id: sw_alert_enabled_sol
+    entity_category: config
     lambda: |-
       return id(alert_enabled_sol);
     turn_on_action:
@@ -1096,6 +1221,7 @@ switch:
   - platform: template
     name: "Alert Enabled Row 4"
     id: sw_alert_enabled_ada
+    entity_category: config
     lambda: |-
       return id(alert_enabled_ada);
     turn_on_action:
@@ -1108,6 +1234,7 @@ switch:
   - platform: template
     name: "Alert Enabled Row 5"
     id: sw_alert_enabled_bnb
+    entity_category: config
     lambda: |-
       return id(alert_enabled_bnb);
     turn_on_action:
@@ -1121,6 +1248,7 @@ switch:
   - platform: template
     name: "Alert Above Row 1 (off = Below)"
     id: sw_alert_dir_btc
+    entity_category: config
     lambda: |-
       return id(alert_dir_btc) >= 0;
     turn_on_action:
@@ -1133,6 +1261,7 @@ switch:
   - platform: template
     name: "Alert Above Row 2 (off = Below)"
     id: sw_alert_dir_eth
+    entity_category: config
     lambda: |-
       return id(alert_dir_eth) >= 0;
     turn_on_action:
@@ -1145,6 +1274,7 @@ switch:
   - platform: template
     name: "Alert Above Row 3 (off = Below)"
     id: sw_alert_dir_sol
+    entity_category: config
     lambda: |-
       return id(alert_dir_sol) >= 0;
     turn_on_action:
@@ -1157,6 +1287,7 @@ switch:
   - platform: template
     name: "Alert Above Row 4 (off = Below)"
     id: sw_alert_dir_ada
+    entity_category: config
     lambda: |-
       return id(alert_dir_ada) >= 0;
     turn_on_action:
@@ -1169,6 +1300,7 @@ switch:
   - platform: template
     name: "Alert Above Row 5 (off = Below)"
     id: sw_alert_dir_bnb
+    entity_category: config
     lambda: |-
       return id(alert_dir_bnb) >= 0;
     turn_on_action:
@@ -1452,6 +1584,13 @@ script:
                     }
                     id(btc_line).publish_state(out);
 
+                    // HA-friendly copy (no recolor tags)
+                    {
+                      char out_ha[96];
+                      snprintf(out_ha, sizeof(out_ha), "%s %.2f  (%+.2f%%)", cur.c_str(), fiat, pct);
+                      id(btc_line_ha).publish_state(out_ha);
+                    }
+
                     // Alerts (price-based)
                     {
                       float thr   = id(alert_price_btc);
@@ -1547,6 +1686,13 @@ script:
                     }
                     id(eth_line).publish_state(out);
 
+                    // HA-friendly copy
+                    {
+                      char out_ha[96];
+                      snprintf(out_ha, sizeof(out_ha), "%s %.2f  (%+.2f%%)", cur.c_str(), fiat, pct);
+                      id(eth_line_ha).publish_state(out_ha);
+                    }
+
                     // Alerts (price-based)
                     {
                       float thr   = id(alert_price_eth);
@@ -1637,6 +1783,13 @@ script:
                       snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur.c_str(), fiat, pct);
                     }
                     id(sol_line).publish_state(out);
+
+                    // HA-friendly copy
+                    {
+                      char out_ha[96];
+                      snprintf(out_ha, sizeof(out_ha), "%s %.2f  (%+.2f%%)", cur.c_str(), fiat, pct);
+                      id(sol_line_ha).publish_state(out_ha);
+                    }
 
                     // Alerts (price-based)
                     {
@@ -1729,6 +1882,13 @@ script:
                     }
                     id(ada_line).publish_state(out);
 
+                    // HA-friendly copy
+                    {
+                      char out_ha[96];
+                      snprintf(out_ha, sizeof(out_ha), "%s %.2f  (%+.2f%%)", cur.c_str(), fiat, pct);
+                      id(ada_line_ha).publish_state(out_ha);
+                    }
+
                     // Alerts (price-based)
                     {
                       float thr   = id(alert_price_ada);
@@ -1819,6 +1979,13 @@ script:
                       snprintf(out, sizeof(out), "%s %.2f  (%+.2f%%)", cur.c_str(), fiat, pct);
                     }
                     id(bnb_line).publish_state(out);
+
+                    // HA-friendly copy
+                    {
+                      char out_ha[96];
+                      snprintf(out_ha, sizeof(out_ha), "%s %.2f  (%+.2f%%)", cur.c_str(), fiat, pct);
+                      id(bnb_line_ha).publish_state(out_ha);
+                    }
 
                     // Alerts (price-based)
                     {
